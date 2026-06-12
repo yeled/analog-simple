@@ -2,7 +2,6 @@
 <iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
     <iq:application id="b3a1e6c2-4f8d-4a2b-9c3e-7d6f5a8b9c12" type="watchface" name="@Strings.AppName" entry="AnalogSimpleApp" launcherIcon="@Drawables.LauncherIcon" minSdkVersion="4.2.0">
         <iq:products>
-            <iq:product id="venu445mm"/>
             <iq:product id="venu441mm"/>
         </iq:products>
         <iq:permissions>

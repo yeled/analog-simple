@@ -126,11 +126,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var points;
 
         if (style == HAND_STYLE_SWORD) {
-            var tipWidth = width * 0.18;
+            // Parallel-sided blade with a pointed tip
+            var tipLen = width * 1.2;
             points = [
                 [-width / 2, tail],
-                [-tipWidth / 2, -length],
-                [tipWidth / 2, -length],
+                [-width / 2, -(length - tipLen)],
+                [0, -length],
+                [width / 2, -(length - tipLen)],
                 [width / 2, tail]
             ];
         } else if (style == HAND_STYLE_DIAMOND) {
@@ -154,6 +156,21 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         dc.fillPolygon(rotatePoints(points, angle));
+
+        if (style == HAND_STYLE_SWORD) {
+            // Transparent lume channel down the middle of the blade
+            var tipLen = width * 1.2;
+            var insetWidth = width * 0.34;
+            var insetPoints = [
+                [-insetWidth / 2, -length * 0.18],
+                [-insetWidth / 2, -(length - tipLen * 1.5)],
+                [insetWidth / 2, -(length - tipLen * 1.5)],
+                [insetWidth / 2, -length * 0.18]
+            ];
+            var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+            dc.setColor(bg, Graphics.COLOR_TRANSPARENT);
+            dc.fillPolygon(rotatePoints(insetPoints, angle));
+        }
     }
 
     //! Draw a thin second hand with a small counterweight tail
@@ -211,16 +228,21 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var ringColor;
         if (getBooleanProperty("RingColorByLevel", true)) {
-            ringColor = levelColor(percent);
+            ringColor = dimColor(levelColor(percent));
         } else {
             ringColor = getColorProperty("RingColor", Graphics.COLOR_BLUE);
         }
 
         var perimeter = roundedSquarePerimeter(boxCenterX, boxCenterY, halfSize, cornerRadius);
 
+        // Dark grey box fill behind the date
+        dc.setColor(dimColor(0x333333), Graphics.COLOR_TRANSPARENT);
+        dc.fillRoundedRectangle(boxCenterX - halfSize, boxCenterY - halfSize,
+            halfSize * 2, halfSize * 2, cornerRadius);
+
         // Track (background) outline
         dc.setPenWidth(penWidth);
-        dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(dimColor(Graphics.COLOR_DK_GRAY), Graphics.COLOR_TRANSPARENT);
         drawPerimeterFraction(dc, perimeter, 1.0);
 
         // Foreground portion representing remaining percentage
@@ -367,9 +389,22 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return Graphics.COLOR_GREEN;
     }
 
+    //! Scale a 24-bit RGB color by the configured brightness percentage.
+    //! Dimmer pixels draw less power on the Venu's AMOLED display.
+    function dimColor(color) {
+        var pct = getNumberProperty("Brightness", 60);
+        if (pct >= 100 || color <= 0) {
+            return color;
+        }
+        var r = ((color >> 16) & 0xFF) * pct / 100;
+        var g = ((color >> 8) & 0xFF) * pct / 100;
+        var b = (color & 0xFF) * pct / 100;
+        return (r << 16) + (g << 8) + b;
+    }
+
     function getColorProperty(key, defaultValue) {
         var value = Application.Properties.getValue(key);
-        return (value != null) ? value : defaultValue;
+        return dimColor((value != null) ? value : defaultValue);
     }
 
     function getNumberProperty(key, defaultValue) {

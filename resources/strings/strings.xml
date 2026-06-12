@@ -14,6 +14,13 @@
     <string id="RingColorByLevelTitle">Color Ring By Level</string>
     <string id="RingColorTitle">Ring Color</string>
 
+    <!-- Brightness options -->
+    <string id="BrightnessTitle">Color Brightness</string>
+    <string id="Brightness100">100% (Full)</string>
+    <string id="Brightness80">80%</string>
+    <string id="Brightness60">60% (Muted)</string>
+    <string id="Brightness40">40%</string>
+
     <!-- Hand style options -->
     <string id="HandStyleClassic">Classic</string>
     <string id="HandStyleSword">Sword</string>

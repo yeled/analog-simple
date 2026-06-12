@@ -61,6 +61,15 @@
         </settingConfig>
     </setting>
 
+    <setting propertyKey="@Properties.Brightness" title="@Strings.BrightnessTitle">
+        <settingConfig type="list">
+            <listEntry value="100">@Strings.Brightness100</listEntry>
+            <listEntry value="80">@Strings.Brightness80</listEntry>
+            <listEntry value="60">@Strings.Brightness60</listEntry>
+            <listEntry value="40">@Strings.Brightness40</listEntry>
+        </settingConfig>
+    </setting>
+
     <setting propertyKey="@Properties.BackgroundColor" title="@Strings.BackgroundColorTitle">
         <settingConfig type="list">
             <listEntry value="0x000000">@Strings.ColorBlack</listEntry>
