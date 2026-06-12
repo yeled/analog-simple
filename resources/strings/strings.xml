@@ -1,0 +1,39 @@
+<strings>
+    <string id="AppName">Analog Simple</string>
+
+    <!-- Setting titles -->
+    <string id="HandStyleTitle">Hand Style</string>
+    <string id="HourHandColorTitle">Hour Hand Color</string>
+    <string id="MinuteHandColorTitle">Minute Hand Color</string>
+    <string id="ShowSecondHandTitle">Show Second Hand</string>
+    <string id="SecondHandColorTitle">Second Hand Color</string>
+    <string id="BackgroundColorTitle">Background Color</string>
+    <string id="TickColorTitle">Tick Mark Color</string>
+    <string id="DateColorTitle">Date Color</string>
+    <string id="RingDataSourceTitle">Battery Ring Source</string>
+    <string id="RingColorByLevelTitle">Color Ring By Level</string>
+    <string id="RingColorTitle">Ring Color</string>
+
+    <!-- Hand style options -->
+    <string id="HandStyleClassic">Classic</string>
+    <string id="HandStyleSword">Sword</string>
+    <string id="HandStyleDiamond">Diamond</string>
+
+    <!-- Battery ring source options -->
+    <string id="RingSourceBodyBattery">Body Battery</string>
+    <string id="RingSourceWatchBattery">Watch Battery</string>
+
+    <!-- Color names -->
+    <string id="ColorBlack">Black</string>
+    <string id="ColorWhite">White</string>
+    <string id="ColorRed">Red</string>
+    <string id="ColorOrange">Orange</string>
+    <string id="ColorYellow">Yellow</string>
+    <string id="ColorGreen">Green</string>
+    <string id="ColorBlue">Blue</string>
+    <string id="ColorCyan">Cyan</string>
+    <string id="ColorPurple">Purple</string>
+    <string id="ColorPink">Pink</string>
+    <string id="ColorLtGray">Light Gray</string>
+    <string id="ColorDkGray">Dark Gray</string>
+</strings>
