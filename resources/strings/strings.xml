@@ -1,0 +1,55 @@
+<strings>
+    <string id="AppName">Analog Simple</string>
+    <!-- Bumped on every .iq (store) build; keep in sync with the git tag -->
+    <string id="AppVersion">1.0.2</string>
+
+    <!-- Setting titles -->
+    <string id="HandStyleTitle">Hand Style</string>
+    <string id="HourHandColorTitle">Hour Hand Color</string>
+    <string id="MinuteHandColorTitle">Minute Hand Color</string>
+    <string id="ShowSecondHandTitle">Show Second Hand</string>
+    <string id="SecondHandColorTitle">Second Hand Color</string>
+    <string id="BackgroundColorTitle">Background Color</string>
+    <string id="TickColorTitle">Tick Mark Color</string>
+    <string id="DateColorTitle">Date Color</string>
+    <string id="RingDataSourceTitle">Battery Ring Source</string>
+    <string id="RingColorByLevelTitle">Color Ring By Level</string>
+    <string id="RingColorTitle">Ring Color</string>
+
+    <!-- Brightness options -->
+    <string id="BrightnessTitle">Color Brightness</string>
+    <string id="Brightness100">100% (Full)</string>
+    <string id="Brightness80">80%</string>
+    <string id="Brightness60">60% (Muted)</string>
+    <string id="Brightness40">40%</string>
+
+    <!-- Hand style options -->
+    <string id="HandStyleClassic">Classic</string>
+    <string id="HandStyleSword">Sword</string>
+    <string id="HandStyleDiamond">Diamond</string>
+
+    <!-- Hand length options -->
+    <string id="HandLengthTitle">Hand Length</string>
+    <string id="HandLengthShort">Short (80%)</string>
+    <string id="HandLengthMedium">Medium (90%)</string>
+    <string id="HandLengthStandard">Standard (100%)</string>
+    <string id="HandLengthLong">Long (110%)</string>
+
+    <!-- Battery ring source options -->
+    <string id="RingSourceBodyBattery">Body Battery</string>
+    <string id="RingSourceWatchBattery">Watch Battery</string>
+
+    <!-- Color names -->
+    <string id="ColorBlack">Black</string>
+    <string id="ColorWhite">White</string>
+    <string id="ColorRed">Red</string>
+    <string id="ColorOrange">Orange</string>
+    <string id="ColorYellow">Yellow</string>
+    <string id="ColorGreen">Green</string>
+    <string id="ColorBlue">Blue</string>
+    <string id="ColorCyan">Cyan</string>
+    <string id="ColorPurple">Purple</string>
+    <string id="ColorPink">Pink</string>
+    <string id="ColorLtGray">Light Gray</string>
+    <string id="ColorDkGray">Dark Gray</string>
+</strings>
