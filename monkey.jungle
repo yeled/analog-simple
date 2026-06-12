@@ -1,5 +1,1 @@
 project.manifest = manifest.xml
-
-# Keep type checking permissive so the watch face compiles across the
-# dynamically-typed property/sensor access patterns used in source/.
-project.typeCheckLevel = 0

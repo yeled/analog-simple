@@ -212,7 +212,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         if (getBooleanProperty("RingColorByLevel", true)) {
             ringColor = levelColor(percent);
         } else {
-            ringColor = getColorProperty("RingColor", Graphics.COLOR_CYAN);
+            ringColor = getColorProperty("RingColor", Graphics.COLOR_BLUE);
         }
 
         // Track (background) ring
