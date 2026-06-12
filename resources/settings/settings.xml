@@ -98,6 +98,10 @@
         </settingConfig>
     </setting>
 
+    <setting propertyKey="@Properties.ShowRainForecast" title="@Strings.ShowRainForecastTitle" prompt="@Strings.ShowRainForecastPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
     <setting propertyKey="@Properties.DateColor" title="@Strings.DateColorTitle">
         <settingConfig type="list">
             <listEntry value="0xFFFFFF">@Strings.ColorWhite</listEntry>

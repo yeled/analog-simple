@@ -6,6 +6,7 @@ import Toybox.System;
 import Toybox.Time;
 import Toybox.Time.Gregorian;
 import Toybox.WatchUi;
+import Toybox.Weather;
 
 // Hand style options (see resources/settings/settings.xml)
 const HAND_STYLE_CLASSIC = 0;
@@ -48,6 +49,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.clear();
 
         drawTicks(dc);
+        drawRainForecast(dc);
         drawBatteryRing(dc);
         drawHands(dc);
     }
@@ -84,6 +86,51 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
             dc.setPenWidth(isMajor ? 4 : 2);
             dc.drawLine(x1, y1, x2, y2);
+        }
+    }
+
+    //! Draw the next 12 hours of rain chance as blue radial bars just inside
+    //! the bezel: 12 o'clock is the soonest hour, going clockwise. Bar length
+    //! is proportional to that hour's precipitation chance (0-100%).
+    function drawRainForecast(dc) {
+        if (!getBooleanProperty("ShowRainForecast", true)) {
+            return;
+        }
+        if (!(Toybox has :Weather) || !(Weather has :getHourlyForecast)) {
+            return;
+        }
+
+        var forecast = Weather.getHourlyForecast();
+        if (forecast == null || forecast.size() == 0) {
+            return;
+        }
+
+        var penWidth = (_radius * 0.028).toNumber();
+        if (penWidth < 4) {
+            penWidth = 4;
+        }
+        dc.setPenWidth(penWidth);
+        dc.setColor(dimColor(0x66B2FF), Graphics.COLOR_TRANSPARENT);
+
+        var count = forecast.size() < 12 ? forecast.size() : 12;
+        var outerRadius = _radius * 0.95;
+        for (var i = 0; i < count; i++) {
+            var pct = forecast[i].precipitationChance;
+            if (pct == null || pct <= 0) {
+                continue;
+            }
+            if (pct > 100) {
+                pct = 100;
+            }
+
+            var angle = i * Math.PI / 6.0;
+            var sin = Math.sin(angle);
+            var cos = Math.cos(angle);
+            var innerRadius = outerRadius - (_radius * 0.18 * pct / 100.0);
+
+            dc.drawLine(
+                _centerX + outerRadius * sin, _centerY - outerRadius * cos,
+                _centerX + innerRadius * sin, _centerY - innerRadius * cos);
         }
     }
 

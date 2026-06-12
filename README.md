@@ -18,6 +18,9 @@ transparent lume channel) at 60% color brightness.*
   lume inset), and Diamond.
 - Adjustable hand length (80-110%).
 - 12 hour tick marks around the bezel (configurable color).
+- An optional 12-hour **rain-chance forecast** drawn as blue bars around the
+  bezel (12 o'clock = soonest hour, clockwise; longer bar = higher chance),
+  sourced from the watch's phone-synced weather — no internet permission needed.
 - A dark grey date box at the 3 o'clock position showing the day of month.
 - A rounded-square progress ring around the date box that shows either your
   current **Body Battery** level or your **Watch Battery** level remaining
@@ -52,6 +55,7 @@ app after installing the watch face:
 | Color Brightness | Mute all colors to 80/60/40% for a softer, lower-power face |
 | Background Color | Watch face background |
 | Tick Mark Color | Color of the bezel hour ticks |
+| Rain Forecast Ticks | Show the next 12 hours of rain chance as blue bezel bars |
 | Date Color | Color of the day number |
 | Battery Ring Source | Body Battery or Watch Battery |
 | Color Ring By Level | Auto-color the ring green/yellow/red by level |

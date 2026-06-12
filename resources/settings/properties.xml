@@ -1,7 +1,7 @@
 <properties>
 
     <!-- Hands -->
-    <property id="HandStyle" type="number">1</property>
+    <property id="HandStyle" type="number">0</property>
     <property id="HandLength" type="number">100</property>
     <property id="HourHandColor" type="number">0xFFFFFF</property>
     <property id="MinuteHandColor" type="number">0xFFFFFF</property>
@@ -13,9 +13,10 @@
     <property id="BackgroundColor" type="number">0x000000</property>
     <property id="TickColor" type="number">0xAAAAAA</property>
     <property id="DateColor" type="number">0xFFFFFF</property>
+    <property id="ShowRainForecast" type="boolean">true</property>
 
     <!-- Battery ring at the 3 o'clock position -->
-    <property id="RingDataSource" type="number">0</property>
+    <property id="RingDataSource" type="number">1</property>
     <property id="RingColorByLevel" type="boolean">true</property>
     <property id="ColorblindMode" type="boolean">false</property>
     <property id="RingColor" type="number">0x00FFFF</property>
