@@ -196,11 +196,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     }
 
     //! Draw the date box at the 3 o'clock position with a battery /
-    //! body battery progress ring around it
+    //! body battery progress ring (a rounded square) around it
     function drawBatteryRing(dc) {
-        var ringCenterX = _centerX + (_radius * 0.62);
-        var ringCenterY = _centerY;
-        var ringRadius = _radius * 0.165;
+        var boxCenterX = _centerX + (_radius * 0.62);
+        var boxCenterY = _centerY;
+        var halfSize = _radius * 0.165;
+        var cornerRadius = halfSize * 0.45;
         var penWidth = (_radius * 0.045).toNumber();
         if (penWidth < 2) {
             penWidth = 2;
@@ -215,32 +216,85 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             ringColor = getColorProperty("RingColor", Graphics.COLOR_BLUE);
         }
 
-        // Track (background) ring
+        var perimeter = roundedSquarePerimeter(boxCenterX, boxCenterY, halfSize, cornerRadius);
+
+        // Track (background) outline
         dc.setPenWidth(penWidth);
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawCircle(ringCenterX, ringCenterY, ringRadius);
+        drawPerimeterFraction(dc, perimeter, 1.0);
 
-        // Foreground arc representing remaining percentage
+        // Foreground portion representing remaining percentage
         dc.setColor(ringColor, Graphics.COLOR_TRANSPARENT);
-        if (percent >= 100) {
-            dc.drawCircle(ringCenterX, ringCenterY, ringRadius);
-        } else if (percent > 0) {
-            var endAngle = 90.0 - (percent / 100.0) * 360.0;
-            dc.drawArc(ringCenterX, ringCenterY, ringRadius, Graphics.ARC_CLOCKWISE, 90, endAngle);
-        }
+        drawPerimeterFraction(dc, perimeter, percent / 100.0);
 
-        drawDate(dc, ringCenterX, ringCenterY, ringRadius);
+        drawDate(dc, boxCenterX, boxCenterY);
     }
 
-    //! Draw the day-of-week and day-of-month inside the ring
-    function drawDate(dc, centerX, centerY, ringRadius) {
+    //! Sample points along a rounded-square outline, starting at the top
+    //! center and going clockwise. Straight edges fall out of the gaps
+    //! between consecutive corner arcs.
+    function roundedSquarePerimeter(cx, cy, half, corner) {
+        var straight = half - corner;
+        var arcSteps = 6;
+        var pts = [[cx, cy - half]];
+
+        // Corner arc centers, clockwise from top-right, with start angles
+        var corners = [
+            [cx + straight, cy - straight, -Math.PI / 2],
+            [cx + straight, cy + straight, 0.0],
+            [cx - straight, cy + straight, Math.PI / 2],
+            [cx - straight, cy - straight, Math.PI]
+        ];
+
+        for (var c = 0; c < 4; c++) {
+            for (var i = 0; i <= arcSteps; i++) {
+                var a = corners[c][2] + (Math.PI / 2) * i / arcSteps;
+                pts = pts.add([corners[c][0] + corner * Math.cos(a),
+                               corners[c][1] + corner * Math.sin(a)]);
+            }
+        }
+
+        return pts.add([cx, cy - half]);
+    }
+
+    //! Draw the first `fraction` (0.0-1.0) of a polyline's length
+    function drawPerimeterFraction(dc, points, fraction) {
+        if (fraction <= 0.0) {
+            return;
+        }
+
+        var total = 0.0;
+        var lengths = new [points.size() - 1];
+        for (var i = 0; i < lengths.size(); i++) {
+            var dx = points[i + 1][0] - points[i][0];
+            var dy = points[i + 1][1] - points[i][1];
+            lengths[i] = Math.sqrt(dx * dx + dy * dy);
+            total += lengths[i];
+        }
+
+        var budget = total * fraction;
+        for (var i = 0; i < lengths.size() && budget > 0; i++) {
+            var p0 = points[i];
+            var p1 = points[i + 1];
+            if (budget >= lengths[i]) {
+                dc.drawLine(p0[0], p0[1], p1[0], p1[1]);
+            } else {
+                var t = budget / lengths[i];
+                dc.drawLine(p0[0], p0[1],
+                            p0[0] + (p1[0] - p0[0]) * t,
+                            p0[1] + (p1[1] - p0[1]) * t);
+            }
+            budget -= lengths[i];
+        }
+    }
+
+    //! Draw the day of month inside the ring
+    function drawDate(dc, centerX, centerY) {
         var dateColor = getColorProperty("DateColor", Graphics.COLOR_WHITE);
         var today = Gregorian.info(Time.now(), Time.FORMAT_MEDIUM);
 
         dc.setColor(dateColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, centerY - ringRadius * 0.42, Graphics.FONT_XTINY, today.day_of_week,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(centerX, centerY + ringRadius * 0.25, Graphics.FONT_SMALL, today.day.format("%d"),
+        dc.drawText(centerX, centerY, Graphics.FONT_SMALL, today.day.format("%d"),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
