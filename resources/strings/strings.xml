@@ -14,6 +14,8 @@
     <string id="DateColorTitle">Date Color</string>
     <string id="RingDataSourceTitle">Battery Ring Source</string>
     <string id="RingColorByLevelTitle">Color Ring By Level</string>
+    <string id="ColorblindModeTitle">Colorblind Mode</string>
+    <string id="ColorblindModePrompt">Use a red-green colorblind-friendly ring palette (red / amber / blue) instead of red / yellow / green.</string>
     <string id="RingColorTitle">Ring Color</string>
 
     <!-- Brightness options -->
