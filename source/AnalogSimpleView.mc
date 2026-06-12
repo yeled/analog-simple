@@ -104,7 +104,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var lengthScale = getNumberProperty("HandLength", 100) / 100.0;
 
         // Hour hand
-        drawHand(dc, hourAngle, _radius * 0.5 * lengthScale, _radius * 0.12, handStyle, hourColor);
+        drawHand(dc, hourAngle, _radius * 0.5 * lengthScale, _radius * 0.105, handStyle, hourColor);
 
         // Minute hand
         drawHand(dc, minuteAngle, _radius * 0.82 * lengthScale, _radius * 0.08, handStyle, minuteColor);
