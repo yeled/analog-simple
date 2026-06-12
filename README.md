@@ -22,7 +22,8 @@ transparent lume channel) at 60% color brightness.*
 - A rounded-square progress ring around the date box that shows either your
   current **Body Battery** level or your **Watch Battery** level remaining
   (0-100%). The ring can either be a fixed color or automatically colored
-  green/yellow/red based on the level.
+  green/yellow/red based on the level, with an optional **Colorblind Mode**
+  that switches to a red-green-safe red/amber/blue scale.
 - A color brightness setting (100/80/60/40%) that mutes every drawn color —
   dimmer pixels also draw less power on the AMOLED display.
 
@@ -54,6 +55,7 @@ app after installing the watch face:
 | Date Color | Color of the day number |
 | Battery Ring Source | Body Battery or Watch Battery |
 | Color Ring By Level | Auto-color the ring green/yellow/red by level |
+| Colorblind Mode | Use a red-green-safe red/amber/blue ring scale |
 | Ring Color | Fixed ring color (used when "Color Ring By Level" is off) |
 
 ## Building
