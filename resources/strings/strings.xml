@@ -1,7 +1,7 @@
 <strings>
     <string id="AppName">Analog Simple</string>
     <!-- Bumped on every .iq (store) build; keep in sync with the git tag -->
-    <string id="AppVersion">1.0.2</string>
+    <string id="AppVersion">1.0.4</string>
 
     <!-- Setting titles -->
     <string id="HandStyleTitle">Hand Style</string>
