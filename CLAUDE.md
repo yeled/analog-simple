@@ -41,9 +41,11 @@ Connect IQ manifests have no app-version field (`iq:manifest version="3"` is
 the manifest *schema* version — never bump it). The app version lives in the
 `AppVersion` string in `resources/strings/strings.xml`.
 
-**Every committed change ships as a store build**: after committing, bump
-`AppVersion`, commit the bump, tag it `v<version>`, push, build the `.iq`,
-and tell the user the new version (it goes in the store upload form).
+**Every committed change to the app ships as a store build**: after
+committing, bump `AppVersion`, commit the bump, tag it `v<version>`, push,
+build the `.iq`, and tell the user the new version (it goes in the store
+upload form). Docs-only changes (README, screenshots, CLAUDE.md) get **no**
+version bump and no `.iq`.
 
 ## Simulator gotchas (learned the hard way)
 
