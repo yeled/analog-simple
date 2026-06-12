@@ -101,12 +101,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var hourColor = getColorProperty("HourHandColor", Graphics.COLOR_WHITE);
         var minuteColor = getColorProperty("MinuteHandColor", Graphics.COLOR_WHITE);
+        var lengthScale = getNumberProperty("HandLength", 100) / 100.0;
 
         // Hour hand
-        drawHand(dc, hourAngle, _radius * 0.5, _radius * 0.12, handStyle, hourColor);
+        drawHand(dc, hourAngle, _radius * 0.5 * lengthScale, _radius * 0.12, handStyle, hourColor);
 
         // Minute hand
-        drawHand(dc, minuteAngle, _radius * 0.82, _radius * 0.08, handStyle, minuteColor);
+        drawHand(dc, minuteAngle, _radius * 0.82 * lengthScale, _radius * 0.08, handStyle, minuteColor);
 
         // Second hand (skipped while sleeping to save power / avoid burn-in)
         if (_isAwake && getBooleanProperty("ShowSecondHand", true)) {
@@ -229,7 +230,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     function drawBatteryRing(dc) {
         var boxCenterX = _centerX + (_radius * 0.62);
         var boxCenterY = _centerY;
-        var halfSize = _radius * 0.165;
+        var halfSize = _radius * 0.125;
         var cornerRadius = halfSize * 0.45;
         var penWidth = (_radius * 0.0225).toNumber();
         if (penWidth < 1) {
@@ -328,7 +329,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var today = Gregorian.info(Time.now(), Time.FORMAT_MEDIUM);
 
         dc.setColor(dateColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, centerY, Graphics.FONT_SMALL, today.day.format("%d"),
+        dc.drawText(centerX, centerY, Graphics.FONT_XTINY, today.day.format("%d"),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 

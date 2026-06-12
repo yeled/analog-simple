@@ -28,6 +28,13 @@
     <string id="HandStyleSword">Sword</string>
     <string id="HandStyleDiamond">Diamond</string>
 
+    <!-- Hand length options -->
+    <string id="HandLengthTitle">Hand Length</string>
+    <string id="HandLengthShort">Short (80%)</string>
+    <string id="HandLengthMedium">Medium (90%)</string>
+    <string id="HandLengthStandard">Standard (100%)</string>
+    <string id="HandLengthLong">Long (110%)</string>
+
     <!-- Battery ring source options -->
     <string id="RingSourceBodyBattery">Body Battery</string>
     <string id="RingSourceWatchBattery">Watch Battery</string>

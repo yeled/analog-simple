@@ -2,6 +2,7 @@
 
     <!-- Hands -->
     <property id="HandStyle" type="number">1</property>
+    <property id="HandLength" type="number">100</property>
     <property id="HourHandColor" type="number">0xFFFFFF</property>
     <property id="MinuteHandColor" type="number">0xFFFFFF</property>
     <property id="ShowSecondHand" type="boolean">true</property>
