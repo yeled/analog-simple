@@ -119,6 +119,10 @@
         <settingConfig type="boolean" />
     </setting>
 
+    <setting propertyKey="@Properties.ColorblindMode" title="@Strings.ColorblindModeTitle" prompt="@Strings.ColorblindModePrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
     <setting propertyKey="@Properties.RingColor" title="@Strings.RingColorTitle">
         <settingConfig type="list">
             <listEntry value="0x00FFFF">@Strings.ColorCyan</listEntry>

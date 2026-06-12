@@ -104,7 +104,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var lengthScale = getNumberProperty("HandLength", 100) / 100.0;
 
         // Hour hand
-        drawHand(dc, hourAngle, _radius * 0.5 * lengthScale, _radius * 0.105, handStyle, hourColor);
+        drawHand(dc, hourAngle, _radius * 0.5 * lengthScale, _radius * 0.08, handStyle, hourColor);
 
         // Minute hand
         drawHand(dc, minuteAngle, _radius * 0.82 * lengthScale, _radius * 0.08, handStyle, minuteColor);
@@ -392,8 +392,19 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return Math.round(sample.data).toNumber();
     }
 
-    //! Map a 0-100 level to a green / yellow / red color
+    //! Map a 0-100 level to a low / mid / high color. The default scheme is
+    //! red / yellow / green; Colorblind Mode swaps to a red-green-safe
+    //! red / amber / blue scale that also varies in lightness.
     function levelColor(percent) {
+        if (getBooleanProperty("ColorblindMode", false)) {
+            if (percent <= 20) {
+                return 0xFF2222; // red
+            } else if (percent <= 50) {
+                return 0xFFAA00; // amber
+            }
+            return 0x33AAFF;     // blue
+        }
+
         if (percent <= 20) {
             return Graphics.COLOR_RED;
         } else if (percent <= 50) {
