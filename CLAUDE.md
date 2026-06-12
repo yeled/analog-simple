@@ -39,10 +39,11 @@ java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
 
 Connect IQ manifests have no app-version field (`iq:manifest version="3"` is
 the manifest *schema* version — never bump it). The app version lives in the
-`AppVersion` string in `resources/strings/strings.xml`. **On every `.iq`
-(store) build: bump `AppVersion`, tell the user the new version, commit, and
-tag the commit `v<version>`.** The same version should be entered in the
-store upload form.
+`AppVersion` string in `resources/strings/strings.xml`.
+
+**Every committed change ships as a store build**: after committing, bump
+`AppVersion`, commit the bump, tag it `v<version>`, push, build the `.iq`,
+and tell the user the new version (it goes in the store upload form).
 
 ## Simulator gotchas (learned the hard way)
 
