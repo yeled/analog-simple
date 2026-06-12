@@ -154,8 +154,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             ];
         }
 
+        var shape = rotatePoints(points, angle);
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        dc.fillPolygon(rotatePoints(points, angle));
+        dc.fillPolygon(shape);
+
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
 
         if (style == HAND_STYLE_SWORD) {
             // Transparent lume channel down the middle of the blade
@@ -167,9 +170,18 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 [insetWidth / 2, -(length - tipLen * 1.5)],
                 [insetWidth / 2, -length * 0.18]
             ];
-            var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
             dc.setColor(bg, Graphics.COLOR_TRANSPARENT);
             dc.fillPolygon(rotatePoints(insetPoints, angle));
+        }
+
+        // Thin outline in the background color so overlapping hands stay
+        // visually separated at the center
+        dc.setPenWidth(1);
+        dc.setColor(bg, Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < shape.size(); i++) {
+            var p0 = shape[i];
+            var p1 = shape[(i + 1) % shape.size()];
+            dc.drawLine(p0[0], p0[1], p1[0], p1[1]);
         }
     }
 
