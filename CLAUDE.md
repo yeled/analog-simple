@@ -35,6 +35,21 @@ java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
 
 `bin/` is gitignored; build artifacts are never committed.
 
+## Simulator gotchas (learned the hard way)
+
+- The simulator **persists app settings across reinstalls**: loading a new
+  prg keeps stored property values, so changed defaults in `properties.xml`
+  won't show up. After `monkeydo` finishes loading, use File → Reset All App
+  Data (no confirmation dialog) to fall back to the prg's defaults.
+- `monkeydo` can take 10-20s to swap an already-running app, and prints
+  nothing on success — wait before judging what's on screen.
+- Screenshots: `screencapture` needs Screen Recording permission (without it
+  you silently get wallpaper-only images). Use the simulator's own
+  **File → Save Screen Capture** instead — it saves just the device screen
+  and can be driven via System Events UI scripting.
+- If `monkeydo` says "Unable to connect to simulator", the sim is wedged:
+  `pkill -f "ConnectIQ.app/Contents/MacOS/simulator"` and relaunch.
+
 ## SDK gotchas (learned the hard way)
 
 - This SDK's jungle parser rejects `project.typeCheckLevel` (and is picky in

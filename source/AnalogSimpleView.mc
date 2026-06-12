@@ -202,9 +202,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var boxCenterY = _centerY;
         var halfSize = _radius * 0.165;
         var cornerRadius = halfSize * 0.45;
-        var penWidth = (_radius * 0.045).toNumber();
-        if (penWidth < 2) {
-            penWidth = 2;
+        var penWidth = (_radius * 0.0225).toNumber();
+        if (penWidth < 1) {
+            penWidth = 1;
         }
 
         var percent = getRingPercent();
