@@ -14,6 +14,8 @@
     <property id="TickColor" type="number">0xAAAAAA</property>
     <property id="DateColor" type="number">0xFFFFFF</property>
     <property id="ShowRainForecast" type="boolean">true</property>
+    <property id="ShowCloudCover" type="boolean">true</property>
+    <property id="LocationOverride" type="string"></property>
 
     <!-- Battery ring at the 3 o'clock position -->
     <property id="RingDataSource" type="number">1</property>

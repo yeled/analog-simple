@@ -102,6 +102,14 @@
         <settingConfig type="boolean" />
     </setting>
 
+    <setting propertyKey="@Properties.ShowCloudCover" title="@Strings.ShowCloudCoverTitle" prompt="@Strings.ShowCloudCoverPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
+    <setting propertyKey="@Properties.LocationOverride" title="@Strings.LocationOverrideTitle" prompt="@Strings.LocationOverridePrompt">
+        <settingConfig type="alphaNumeric" />
+    </setting>
+
     <setting propertyKey="@Properties.DateColor" title="@Strings.DateColorTitle">
         <settingConfig type="list">
             <listEntry value="0xFFFFFF">@Strings.ColorWhite</listEntry>

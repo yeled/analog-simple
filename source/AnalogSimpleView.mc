@@ -49,6 +49,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         drawTicks(dc);
         drawRainForecast(dc);
+        drawCloudCover(dc);
         drawBatteryRing(dc);
         drawHands(dc);
     }
@@ -105,13 +106,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             return;
         }
 
-        var n = hourly.size() < 12 ? hourly.size() : 12;
+        var n = hourly.size() < 13 ? hourly.size() : 13;
         var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
-        var outerRadius = _radius * 0.95;
-        var minDepth = _radius * 0.012;   // thin ring even when dry
-        var maxDepth = _radius * 0.16;
+        var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
+        var maxDepth = _radius * 0.13;
 
-        // Inner-edge radius for each hour.
+        // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
+        // dry hour, so the blue band only appears where it actually rains.
         var inner = new [n];
         for (var i = 0; i < n; i++) {
             var mm = hourly[i];
@@ -121,27 +122,133 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             } else if (frac < 0.0) {
                 frac = 0.0;
             }
-            inner[i] = outerRadius - (minDepth + frac * (maxDepth - minDepth));
+            inner[i] = outerRadius - frac * maxDepth;
         }
 
-        // Fill the band as smooth quads between consecutive hours.
-        dc.setColor(dimColor(0x4DA6FF), Graphics.COLOR_TRANSPARENT);
-        var sub = 5;
+        // Fill the band as a radial gradient: solid blue at the bezel fading
+        // to the background colour at the inner edge (reads as blue fading to
+        // transparent on a dark face). Each angular column is split into
+        // radial layers, each lerped from blue toward the background.
+        var blue = dimColor(0x4DA6FF);
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var sub = 3;       // angular sub-steps per hour
+        var layers = 7;    // radial gradient bands
         for (var i = 0; i < n - 1; i++) {
+            if (inner[i] >= outerRadius && inner[i + 1] >= outerRadius) {
+                continue;  // no rain across this segment
+            }
             for (var s = 0; s < sub; s++) {
                 var t0 = s * 1.0 / sub;
                 var t1 = (s + 1) * 1.0 / sub;
                 var angA = (i + t0) * Math.PI / 6.0;
                 var angB = (i + t1) * Math.PI / 6.0;
-                var rA = inner[i] + (inner[i + 1] - inner[i]) * t0;
-                var rB = inner[i] + (inner[i + 1] - inner[i]) * t1;
+                var sinA = Math.sin(angA);
+                var cosA = Math.cos(angA);
+                var sinB = Math.sin(angB);
+                var cosB = Math.cos(angB);
+                var depthA = inner[i] + (inner[i + 1] - inner[i]) * t0 - outerRadius;
+                var depthB = inner[i] + (inner[i + 1] - inner[i]) * t1 - outerRadius;
 
-                dc.fillPolygon([
-                    [_centerX + outerRadius * Math.sin(angA), _centerY - outerRadius * Math.cos(angA)],
-                    [_centerX + outerRadius * Math.sin(angB), _centerY - outerRadius * Math.cos(angB)],
-                    [_centerX + rB * Math.sin(angB), _centerY - rB * Math.cos(angB)],
-                    [_centerX + rA * Math.sin(angA), _centerY - rA * Math.cos(angA)]
-                ]);
+                for (var k = 0; k < layers; k++) {
+                    var f0 = k * 1.0 / layers;
+                    var f1 = (k + 1) * 1.0 / layers;
+                    var rA0 = outerRadius + depthA * f0;
+                    var rA1 = outerRadius + depthA * f1;
+                    var rB0 = outerRadius + depthB * f0;
+                    var rB1 = outerRadius + depthB * f1;
+
+                    dc.setColor(lerpColor(blue, bg, (f0 + f1) / 2.0), Graphics.COLOR_TRANSPARENT);
+                    dc.fillPolygon([
+                        [_centerX + rA0 * sinA, _centerY - rA0 * cosA],
+                        [_centerX + rB0 * sinB, _centerY - rB0 * cosB],
+                        [_centerX + rB1 * sinB, _centerY - rB1 * cosB],
+                        [_centerX + rA1 * sinA, _centerY - rA1 * cosA]
+                    ]);
+                }
+            }
+        }
+    }
+
+    //! Draw cloud cover as three concentric grey lines — low, mid and high
+    //! altitude — each at its own fixed radius, with higher cloud nearer the
+    //! centre (the rim is the horizon). A line's thickness tracks that band's
+    //! hourly coverage with a soft grey gradient; nothing is drawn for an hour
+    //! whose coverage is 0%. Data from RainService (Open-Meteo).
+    function drawCloudCover(dc) {
+        if (!getBooleanProperty("ShowCloudCover", true)) {
+            return;
+        }
+
+        var grey = dimColor(0xCCCCCC);
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+
+        // Higher altitude band sits closer to the centre.
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.80, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.66, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.52, grey, bg);
+    }
+
+    //! Draw one cloud band: a soft grey line at a fixed radius whose thickness
+    //! tracks the hourly coverage (0-100). Hours with no cloud are left blank,
+    //! so the line only appears where there is cloud.
+    function drawCloudBand(dc, cover, baseRadius, grey, bg) {
+        if (cover == null || cover.size() < 2) {
+            return;
+        }
+
+        var n = cover.size() < 13 ? cover.size() : 13;
+        var minHalf = _radius * 0.004;   // thin line at light cover
+        var maxHalf = _radius * 0.022;   // fat soft band when overcast
+
+        var hw = new [n];
+        for (var i = 0; i < n; i++) {
+            var c = cover[i];
+            if (c == null || c < 0) {
+                c = 0;
+            } else if (c > 100) {
+                c = 100;
+            }
+            hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
+        }
+
+        var sub = 2;
+        var layers = 3;
+        for (var i = 0; i < n - 1; i++) {
+            if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
+                continue;  // no cloud across this segment
+            }
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var angA = (i + t0) * Math.PI / 6.0;
+                var angB = (i + t1) * Math.PI / 6.0;
+                var sinA = Math.sin(angA);
+                var cosA = Math.cos(angA);
+                var sinB = Math.sin(angB);
+                var cosB = Math.cos(angB);
+                var hwA = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
+
+                for (var k = 0; k < layers; k++) {
+                    var g0 = k * 1.0 / layers;
+                    var g1 = (k + 1) * 1.0 / layers;
+                    dc.setColor(lerpColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
+
+                    // Outer half of the band.
+                    dc.fillPolygon([
+                        [_centerX + (baseRadius + hwA * g0) * sinA, _centerY - (baseRadius + hwA * g0) * cosA],
+                        [_centerX + (baseRadius + hwB * g0) * sinB, _centerY - (baseRadius + hwB * g0) * cosB],
+                        [_centerX + (baseRadius + hwB * g1) * sinB, _centerY - (baseRadius + hwB * g1) * cosB],
+                        [_centerX + (baseRadius + hwA * g1) * sinA, _centerY - (baseRadius + hwA * g1) * cosA]
+                    ]);
+                    // Inner half of the band.
+                    dc.fillPolygon([
+                        [_centerX + (baseRadius - hwA * g1) * sinA, _centerY - (baseRadius - hwA * g1) * cosA],
+                        [_centerX + (baseRadius - hwB * g1) * sinB, _centerY - (baseRadius - hwB * g1) * cosB],
+                        [_centerX + (baseRadius - hwB * g0) * sinB, _centerY - (baseRadius - hwB * g0) * cosB],
+                        [_centerX + (baseRadius - hwA * g0) * sinA, _centerY - (baseRadius - hwA * g0) * cosA]
+                    ]);
+                }
             }
         }
     }
@@ -482,6 +589,19 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var r = ((color >> 16) & 0xFF) * pct / 100;
         var g = ((color >> 8) & 0xFF) * pct / 100;
         var b = (color & 0xFF) * pct / 100;
+        return (r << 16) + (g << 8) + b;
+    }
+
+    //! Linearly blend two 24-bit RGB colors; t=0 returns c0, t=1 returns c1.
+    function lerpColor(c0, c1, t) {
+        if (t < 0.0) {
+            t = 0.0;
+        } else if (t > 1.0) {
+            t = 1.0;
+        }
+        var r = (((c0 >> 16) & 0xFF) + (((c1 >> 16) & 0xFF) - ((c0 >> 16) & 0xFF)) * t).toNumber();
+        var g = (((c0 >> 8) & 0xFF) + (((c1 >> 8) & 0xFF) - ((c0 >> 8) & 0xFF)) * t).toNumber();
+        var b = ((c0 & 0xFF) + ((c1 & 0xFF) - (c0 & 0xFF)) * t).toNumber();
         return (r << 16) + (g << 8) + b;
     }
 
