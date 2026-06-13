@@ -182,11 +182,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             return;
         }
 
+        // Clouds hover as a thin haze right at the bezel, above the rain band
+        // (rain outer edge is 0.95R) — even low cloud stays near the rim.
         var n = density.size() < 12 ? density.size() : 12;
-        var rLow = _radius * 0.86;        // low cloud radius
-        var rHigh = _radius * 0.975;      // high cloud radius (near rim)
+        var rLow = _radius * 0.965;       // low cloud radius
+        var rHigh = _radius * 1.0;        // high cloud radius (at the rim)
         var minHalf = _radius * 0.004;    // hairline when clear
-        var maxHalf = _radius * 0.03;     // fat band when overcast
+        var maxHalf = _radius * 0.015;    // soft band when overcast
 
         var rc = new [n];   // centre radius (height)
         var hw = new [n];   // half-thickness (density)
