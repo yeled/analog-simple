@@ -35,14 +35,14 @@ class AnalogSimpleApp extends Application.AppBase {
     }
 
     // Register (or clear) the temporal event that drives the rain fetch.
-    // First run with no cached data fetches soon; afterwards, hourly.
+    // First run with no cached data fetches soon; afterwards, every 15 min.
     hidden function registerRainFetch() {
         if (!getBoolProperty("ShowRainForecast", true)) {
             Background.deleteTemporalEvent();
             return;
         }
         var hasData = Application.Storage.getValue("rain_hourly") != null;
-        Background.registerForTemporalEvent(new Time.Duration(hasData ? 3600 : 300));
+        Background.registerForTemporalEvent(new Time.Duration(hasData ? 900 : 300));
     }
 
     hidden function getBoolProperty(key, defaultValue) {

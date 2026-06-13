@@ -10,8 +10,8 @@ import Toybox.Weather;
 (:background)
 class RainServiceDelegate extends System.ServiceDelegate {
 
-    // Minimum seconds between fetches (Open-Meteo updates hourly).
-    private const REFRESH_INTERVAL = 3600;
+    // Minimum seconds between fetches.
+    private const REFRESH_INTERVAL = 900;  // 15 minutes
 
     function initialize() {
         System.ServiceDelegate.initialize();
