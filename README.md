@@ -18,10 +18,10 @@ transparent lume channel) at 60% color brightness.*
   lume inset), and Diamond.
 - Adjustable hand length (80-110%).
 - 12 hour tick marks around the bezel (configurable color).
-- An optional 12-hour **rain-amount forecast** drawn as blue bars around the
-  bezel (12 o'clock = soonest hour, clockwise); each bar's length and thickness
-  scale with that hour's precipitation in mm — a hairline when dry, a thick bar
-  for heavy rain. Data is fetched in the background from
+- An optional 12-hour **rain-amount forecast** drawn as a solid blue band
+  around the bezel (12 o'clock = soonest hour, clockwise); the band's inner edge
+  pulls inward with that hour's precipitation in mm — a thin ring when dry,
+  a deep bulge for heavy rain. Data is fetched in the background from
   [Open-Meteo](https://open-meteo.com/) (ECMWF model) and needs the watch's
   location plus a phone connection to refresh.
 - A dark grey date box at the 3 o'clock position showing the day of month.
@@ -58,7 +58,7 @@ app after installing the watch face:
 | Color Brightness | Mute all colors to 80/60/40% for a softer, lower-power face |
 | Background Color | Watch face background |
 | Tick Mark Color | Color of the bezel hour ticks |
-| Rain Forecast Ticks | Show the next 12 hours of rain amount as blue bezel bars (Open-Meteo) |
+| Rain Forecast Ticks | Show the next 12 hours of rain amount as a blue bezel band (Open-Meteo) |
 | Date Color | Color of the day number |
 | Battery Ring Source | Body Battery or Watch Battery |
 | Color Ring By Level | Auto-color the ring green/yellow/red by level |

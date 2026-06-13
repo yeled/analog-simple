@@ -13,7 +13,7 @@
     <string id="TickColorTitle">Tick Mark Color</string>
     <string id="DateColorTitle">Date Color</string>
     <string id="ShowRainForecastTitle">Rain Forecast Ticks</string>
-    <string id="ShowRainForecastPrompt">Show the next 12 hours of rain amount as blue bars around the bezel, thicker and longer for heavier rain (12 o'clock = soonest hour, clockwise). Uses Open-Meteo; needs location and a phone connection to refresh.</string>
+    <string id="ShowRainForecastPrompt">Show the next 12 hours of rain amount as a blue band around the bezel that deepens with heavier rain (12 o'clock = soonest hour, clockwise). Uses Open-Meteo; needs location and a phone connection to refresh.</string>
     <string id="RingDataSourceTitle">Battery Ring Source</string>
     <string id="RingColorByLevelTitle">Color Ring By Level</string>
     <string id="ColorblindModeTitle">Colorblind Mode</string>
