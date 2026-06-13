@@ -6,7 +6,6 @@ import Toybox.System;
 import Toybox.Time;
 import Toybox.Time.Gregorian;
 import Toybox.WatchUi;
-import Toybox.Weather;
 
 // Hand style options (see resources/settings/settings.xml)
 const HAND_STYLE_CLASSIC = 0;
@@ -89,45 +88,51 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
-    //! Draw the next 12 hours of rain chance as blue radial bars just inside
-    //! the bezel: 12 o'clock is the soonest hour, going clockwise. Bar length
-    //! is proportional to that hour's precipitation chance (0-100%).
+    //! Draw the next 12 hours of rain *amount* (mm) as blue radial bars just
+    //! inside the bezel: 12 o'clock is the soonest hour, going clockwise. Both
+    //! bar length and thickness scale with the hourly precipitation amount —
+    //! a hairline mark for a dry hour, a thick long bar for heavy rain. Data
+    //! comes from RainService (Open-Meteo, cached in Application.Storage).
     function drawRainForecast(dc) {
         if (!getBooleanProperty("ShowRainForecast", true)) {
             return;
         }
-        if (!(Toybox has :Weather) || !(Weather has :getHourlyForecast)) {
+
+        var hourly = Application.Storage.getValue("rain_hourly");
+        if (hourly == null || hourly.size() == 0) {
             return;
         }
 
-        var forecast = Weather.getHourlyForecast();
-        if (forecast == null || forecast.size() == 0) {
-            return;
+        // mm/hr that maps to a full-length, full-thickness bar (heavy rain).
+        var maxMm = 4.0;
+        var maxPen = (_radius * 0.028).toNumber();
+        if (maxPen < 4) {
+            maxPen = 4;
         }
+        var outerRadius = _radius * 0.95;
+        var minLen = _radius * 0.02;
+        var maxLen = _radius * 0.18;
 
-        var penWidth = (_radius * 0.028).toNumber();
-        if (penWidth < 4) {
-            penWidth = 4;
-        }
-        dc.setPenWidth(penWidth);
         dc.setColor(dimColor(0x66B2FF), Graphics.COLOR_TRANSPARENT);
 
-        var count = forecast.size() < 12 ? forecast.size() : 12;
-        var outerRadius = _radius * 0.95;
+        var count = hourly.size() < 12 ? hourly.size() : 12;
         for (var i = 0; i < count; i++) {
-            var pct = forecast[i].precipitationChance;
-            if (pct == null || pct <= 0) {
-                continue;
+            var mm = hourly[i];
+            var frac = (mm == null) ? 0.0 : mm / maxMm;
+            if (frac > 1.0) {
+                frac = 1.0;
+            } else if (frac < 0.0) {
+                frac = 0.0;
             }
-            if (pct > 100) {
-                pct = 100;
-            }
+
+            var pen = 1 + (frac * (maxPen - 1)).toNumber();
+            var innerRadius = outerRadius - (minLen + frac * (maxLen - minLen));
 
             var angle = i * Math.PI / 6.0;
             var sin = Math.sin(angle);
             var cos = Math.cos(angle);
-            var innerRadius = outerRadius - (_radius * 0.18 * pct / 100.0);
 
+            dc.setPenWidth(pen);
             dc.drawLine(
                 _centerX + outerRadius * sin, _centerY - outerRadius * cos,
                 _centerX + innerRadius * sin, _centerY - innerRadius * cos);
