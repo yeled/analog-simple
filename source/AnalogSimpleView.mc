@@ -108,9 +108,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = hourly.size() < 12 ? hourly.size() : 12;
         var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
-        var outerRadius = _radius * 0.95;
+        var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
         var minDepth = _radius * 0.012;   // thin ring even when dry
-        var maxDepth = _radius * 0.16;
+        var maxDepth = _radius * 0.11;
 
         // Inner-edge radius for each hour.
         var inner = new [n];
@@ -182,13 +182,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             return;
         }
 
-        // Clouds hover as a thin haze right at the bezel, above the rain band
-        // (rain outer edge is 0.95R) — even low cloud stays near the rim.
+        // Treat the rim as the horizon: rain hugs it, clouds float in the sky
+        // above it (further inward). Higher cloud sits further toward centre;
+        // low cloud hovers just above the rain band (heavy rain reaches ~0.86R).
         var n = density.size() < 12 ? density.size() : 12;
-        var rLow = _radius * 0.965;       // low cloud radius
-        var rHigh = _radius * 1.0;        // high cloud radius (at the rim)
+        var rLow = _radius * 0.83;        // low cloud, just above the rain
+        var rHigh = _radius * 0.68;       // high cloud, floats further in
         var minHalf = _radius * 0.004;    // hairline when clear
-        var maxHalf = _radius * 0.015;    // soft band when overcast
+        var maxHalf = _radius * 0.018;    // soft band when overcast
 
         var rc = new [n];   // centre radius (height)
         var hw = new [n];   // half-thickness (density)
