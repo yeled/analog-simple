@@ -30,8 +30,27 @@ class AnalogSimpleApp extends Application.AppBase {
 
     // New app settings have been received so trigger a UI update
     function onSettingsChanged() {
+        invalidateCacheIfLocationChanged();
         registerRainFetch();
         WatchUi.requestUpdate();
+    }
+
+    // If the manual lat/long override has changed, drop the cached forecast so
+    // the next fetch refreshes for the new location instead of serving stale
+    // data for the old one.
+    hidden function invalidateCacheIfLocationChanged() {
+        var current = Application.Properties.getValue("LocationOverride");
+        var currentStr = (current instanceof String) ? current : "";
+        var applied = Application.Storage.getValue("loc_override_applied");
+        var appliedStr = (applied instanceof String) ? applied : "";
+        if (!currentStr.equals(appliedStr)) {
+            Application.Storage.deleteValue("rain_hourly");
+            Application.Storage.deleteValue("cloud_low");
+            Application.Storage.deleteValue("cloud_mid");
+            Application.Storage.deleteValue("cloud_high");
+            Application.Storage.deleteValue("rain_updated");
+            Application.Storage.setValue("loc_override_applied", currentStr);
+        }
     }
 
     // Register (or clear) the temporal event that drives the rain fetch.
