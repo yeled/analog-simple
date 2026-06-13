@@ -49,6 +49,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         drawTicks(dc);
         drawRainForecast(dc);
+        drawCloudCover(dc);
         drawBatteryRing(dc);
         drawHands(dc);
     }
@@ -159,6 +160,85 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                         [_centerX + rB0 * sinB, _centerY - rB0 * cosB],
                         [_centerX + rB1 * sinB, _centerY - rB1 * cosB],
                         [_centerX + rA1 * sinA, _centerY - rA1 * cosA]
+                    ]);
+                }
+            }
+        }
+    }
+
+    //! Draw cloud cover as a soft grey line hovering near the bezel. The line's
+    //! radius tracks cloud *height* (low cloud sits further in, high cloud hugs
+    //! the rim) and its thickness tracks cloud *density* — a hairline when
+    //! clear, a fat soft-edged grey band when overcast, fading to the
+    //! background on both sides to read cloud-like. Data from RainService.
+    function drawCloudCover(dc) {
+        if (!getBooleanProperty("ShowCloudCover", true)) {
+            return;
+        }
+
+        var density = Application.Storage.getValue("cloud_density");
+        var height = Application.Storage.getValue("cloud_height");
+        if (density == null || height == null || density.size() < 2) {
+            return;
+        }
+
+        var n = density.size() < 12 ? density.size() : 12;
+        var rLow = _radius * 0.86;        // low cloud radius
+        var rHigh = _radius * 0.975;      // high cloud radius (near rim)
+        var minHalf = _radius * 0.004;    // hairline when clear
+        var maxHalf = _radius * 0.03;     // fat band when overcast
+
+        var rc = new [n];   // centre radius (height)
+        var hw = new [n];   // half-thickness (density)
+        for (var i = 0; i < n; i++) {
+            var h = height[i];
+            if (h == null) { h = 0.5; }
+            if (h < 0.0) { h = 0.0; } else if (h > 1.0) { h = 1.0; }
+            rc[i] = rLow + (rHigh - rLow) * h;
+
+            var d = density[i];
+            if (d == null) { d = 0; }
+            if (d < 0) { d = 0; } else if (d > 100) { d = 100; }
+            hw[i] = minHalf + (maxHalf - minHalf) * (d / 100.0);
+        }
+
+        var grey = dimColor(0xCCCCCC);
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var sub = 3;
+        var layers = 5;
+        for (var i = 0; i < n - 1; i++) {
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var angA = (i + t0) * Math.PI / 6.0;
+                var angB = (i + t1) * Math.PI / 6.0;
+                var sinA = Math.sin(angA);
+                var cosA = Math.cos(angA);
+                var sinB = Math.sin(angB);
+                var cosB = Math.cos(angB);
+                var rcA = rc[i] + (rc[i + 1] - rc[i]) * t0;
+                var rcB = rc[i] + (rc[i + 1] - rc[i]) * t1;
+                var hwA = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
+
+                for (var k = 0; k < layers; k++) {
+                    var g0 = k * 1.0 / layers;
+                    var g1 = (k + 1) * 1.0 / layers;
+                    dc.setColor(lerpColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
+
+                    // Outer half of the band.
+                    dc.fillPolygon([
+                        [_centerX + (rcA + hwA * g0) * sinA, _centerY - (rcA + hwA * g0) * cosA],
+                        [_centerX + (rcB + hwB * g0) * sinB, _centerY - (rcB + hwB * g0) * cosB],
+                        [_centerX + (rcB + hwB * g1) * sinB, _centerY - (rcB + hwB * g1) * cosB],
+                        [_centerX + (rcA + hwA * g1) * sinA, _centerY - (rcA + hwA * g1) * cosA]
+                    ]);
+                    // Inner half of the band.
+                    dc.fillPolygon([
+                        [_centerX + (rcA - hwA * g1) * sinA, _centerY - (rcA - hwA * g1) * cosA],
+                        [_centerX + (rcB - hwB * g1) * sinB, _centerY - (rcB - hwB * g1) * cosB],
+                        [_centerX + (rcB - hwB * g0) * sinB, _centerY - (rcB - hwB * g0) * cosB],
+                        [_centerX + (rcA - hwA * g0) * sinA, _centerY - (rcA - hwA * g0) * cosA]
                     ]);
                 }
             }
