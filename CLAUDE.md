@@ -35,17 +35,27 @@ java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
 
 `bin/` is gitignored; build artifacts are never committed.
 
-## Versioning
+## Versioning, branches & releases
 
 Connect IQ manifests have no app-version field (`iq:manifest version="3"` is
 the manifest *schema* version — never bump it). The app version lives in the
 `AppVersion` string in `resources/strings/strings.xml`.
 
-**Every committed change to the app ships as a store build**: after
-committing, bump `AppVersion`, commit the bump, tag it `v<version>`, push,
-build the `.iq`, and tell the user the new version (it goes in the store
-upload form). Docs-only changes (README, screenshots, CLAUDE.md) get **no**
-version bump and no `.iq`.
+**Two Garmin app ids, two branches** (a published Connect IQ app can't move
+from beta to public — it needs a fresh app id):
+- **beta** — app id `b3a1e6c2-…`, on `main` and dev branches (e.g.
+  `claude/rain-gradient`). For ongoing development/testing. Tag betas
+  `v<version>-beta`.
+- **public** — app id `88c61d1d-…`, on the `public` branch. The global
+  release. Tag `v<version>` (plain). The two app ids' version numbers run
+  independently, so the same `vX.Y.Z` and `vX.Y.Z-beta` can coexist.
+
+When asked to build the `.iq`: bump `AppVersion`, commit the bump, build the
+`.iq`, and report the version. Tag per the branch's scheme above. Docs-only
+changes (README, screenshots, CLAUDE.md) get no version bump and no `.iq`.
+
+**Do not `git push`** — the user pushes and manages merges/branch topology
+(beta → `public`) themselves. Commit and tag locally; leave pushing to them.
 
 ## Simulator gotchas (learned the hard way)
 
