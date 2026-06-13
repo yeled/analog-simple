@@ -107,9 +107,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         var n = hourly.size() < 13 ? hourly.size() : 13;
-        var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
+        var maxMm = 4.0;                  // mm/hr that maps to the deepest band
         var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
-        var maxDepth = _radius * 0.13;
+        var maxDepth = _radius * 0.30;    // exaggerated: 4mm+ reads as heavy
 
         // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
         // dry hour, so the blue band only appears where it actually rains.
@@ -182,10 +182,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var grey = dimColor(0xCCCCCC);
         var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
 
-        // Higher altitude band sits closer to the centre.
-        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.80, grey, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.66, grey, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.52, grey, bg);
+        // Higher altitude band sits closer to the centre. Radii are spaced so
+        // the thick bands overlap a little, stacking the grey gradients.
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, grey, bg);
     }
 
     //! Draw one cloud band: a soft grey line at a fixed radius whose thickness
@@ -197,8 +198,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         var n = cover.size() < 13 ? cover.size() : 13;
-        var minHalf = _radius * 0.004;   // thin line at light cover
-        var maxHalf = _radius * 0.022;   // fat soft band when overcast
+        var minHalf = _radius * 0.006;   // thin line at light cover
+        var maxHalf = _radius * 0.065;   // exaggerated: 100% reads as heavy
 
         var hw = new [n];
         for (var i = 0; i < n; i++) {
