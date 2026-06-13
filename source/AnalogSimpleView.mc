@@ -124,24 +124,43 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             inner[i] = outerRadius - (minDepth + frac * (maxDepth - minDepth));
         }
 
-        // Fill the band as smooth quads between consecutive hours.
-        dc.setColor(dimColor(0x4DA6FF), Graphics.COLOR_TRANSPARENT);
-        var sub = 5;
+        // Fill the band as a radial gradient: solid blue at the bezel fading
+        // to the background colour at the inner edge (reads as blue fading to
+        // transparent on a dark face). Each angular column is split into
+        // radial layers, each lerped from blue toward the background.
+        var blue = dimColor(0x4DA6FF);
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var sub = 3;       // angular sub-steps per hour
+        var layers = 7;    // radial gradient bands
         for (var i = 0; i < n - 1; i++) {
             for (var s = 0; s < sub; s++) {
                 var t0 = s * 1.0 / sub;
                 var t1 = (s + 1) * 1.0 / sub;
                 var angA = (i + t0) * Math.PI / 6.0;
                 var angB = (i + t1) * Math.PI / 6.0;
-                var rA = inner[i] + (inner[i + 1] - inner[i]) * t0;
-                var rB = inner[i] + (inner[i + 1] - inner[i]) * t1;
+                var sinA = Math.sin(angA);
+                var cosA = Math.cos(angA);
+                var sinB = Math.sin(angB);
+                var cosB = Math.cos(angB);
+                var depthA = inner[i] + (inner[i + 1] - inner[i]) * t0 - outerRadius;
+                var depthB = inner[i] + (inner[i + 1] - inner[i]) * t1 - outerRadius;
 
-                dc.fillPolygon([
-                    [_centerX + outerRadius * Math.sin(angA), _centerY - outerRadius * Math.cos(angA)],
-                    [_centerX + outerRadius * Math.sin(angB), _centerY - outerRadius * Math.cos(angB)],
-                    [_centerX + rB * Math.sin(angB), _centerY - rB * Math.cos(angB)],
-                    [_centerX + rA * Math.sin(angA), _centerY - rA * Math.cos(angA)]
-                ]);
+                for (var k = 0; k < layers; k++) {
+                    var f0 = k * 1.0 / layers;
+                    var f1 = (k + 1) * 1.0 / layers;
+                    var rA0 = outerRadius + depthA * f0;
+                    var rA1 = outerRadius + depthA * f1;
+                    var rB0 = outerRadius + depthB * f0;
+                    var rB1 = outerRadius + depthB * f1;
+
+                    dc.setColor(lerpColor(blue, bg, (f0 + f1) / 2.0), Graphics.COLOR_TRANSPARENT);
+                    dc.fillPolygon([
+                        [_centerX + rA0 * sinA, _centerY - rA0 * cosA],
+                        [_centerX + rB0 * sinB, _centerY - rB0 * cosB],
+                        [_centerX + rB1 * sinB, _centerY - rB1 * cosB],
+                        [_centerX + rA1 * sinA, _centerY - rA1 * cosA]
+                    ]);
+                }
             }
         }
     }
@@ -482,6 +501,19 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var r = ((color >> 16) & 0xFF) * pct / 100;
         var g = ((color >> 8) & 0xFF) * pct / 100;
         var b = (color & 0xFF) * pct / 100;
+        return (r << 16) + (g << 8) + b;
+    }
+
+    //! Linearly blend two 24-bit RGB colors; t=0 returns c0, t=1 returns c1.
+    function lerpColor(c0, c1, t) {
+        if (t < 0.0) {
+            t = 0.0;
+        } else if (t > 1.0) {
+            t = 1.0;
+        }
+        var r = (((c0 >> 16) & 0xFF) + (((c1 >> 16) & 0xFF) - ((c0 >> 16) & 0xFF)) * t).toNumber();
+        var g = (((c0 >> 8) & 0xFF) + (((c1 >> 8) & 0xFF) - ((c0 >> 8) & 0xFF)) * t).toNumber();
+        var b = ((c0 & 0xFF) + ((c1 & 0xFF) - (c0 & 0xFF)) * t).toNumber();
         return (r << 16) + (g << 8) + b;
     }
 
