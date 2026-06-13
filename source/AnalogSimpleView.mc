@@ -109,10 +109,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var n = hourly.size() < 12 ? hourly.size() : 12;
         var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
         var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
-        var minDepth = _radius * 0.012;   // thin ring even when dry
-        var maxDepth = _radius * 0.11;
+        var maxDepth = _radius * 0.13;
 
-        // Inner-edge radius for each hour.
+        // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
+        // dry hour, so the blue band only appears where it actually rains.
         var inner = new [n];
         for (var i = 0; i < n; i++) {
             var mm = hourly[i];
@@ -122,7 +122,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             } else if (frac < 0.0) {
                 frac = 0.0;
             }
-            inner[i] = outerRadius - (minDepth + frac * (maxDepth - minDepth));
+            inner[i] = outerRadius - frac * maxDepth;
         }
 
         // Fill the band as a radial gradient: solid blue at the bezel fading
@@ -134,6 +134,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var sub = 3;       // angular sub-steps per hour
         var layers = 7;    // radial gradient bands
         for (var i = 0; i < n - 1; i++) {
+            if (inner[i] >= outerRadius && inner[i + 1] >= outerRadius) {
+                continue;  // no rain across this segment
+            }
             for (var s = 0; s < sub; s++) {
                 var t0 = s * 1.0 / sub;
                 var t1 = (s + 1) * 1.0 / sub;
@@ -166,50 +169,54 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
-    //! Draw cloud cover as a soft grey line hovering near the bezel. The line's
-    //! radius tracks cloud *height* (low cloud sits further in, high cloud hugs
-    //! the rim) and its thickness tracks cloud *density* — a hairline when
-    //! clear, a fat soft-edged grey band when overcast, fading to the
-    //! background on both sides to read cloud-like. Data from RainService.
+    //! Draw cloud cover as three concentric grey lines — low, mid and high
+    //! altitude — each at its own fixed radius, with higher cloud nearer the
+    //! centre (the rim is the horizon). A line's thickness tracks that band's
+    //! hourly coverage with a soft grey gradient; nothing is drawn for an hour
+    //! whose coverage is 0%. Data from RainService (Open-Meteo).
     function drawCloudCover(dc) {
         if (!getBooleanProperty("ShowCloudCover", true)) {
             return;
         }
 
-        var density = Application.Storage.getValue("cloud_density");
-        var height = Application.Storage.getValue("cloud_height");
-        if (density == null || height == null || density.size() < 2) {
+        var grey = dimColor(0xCCCCCC);
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+
+        // Higher altitude band sits closer to the centre.
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.80, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.66, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.52, grey, bg);
+    }
+
+    //! Draw one cloud band: a soft grey line at a fixed radius whose thickness
+    //! tracks the hourly coverage (0-100). Hours with no cloud are left blank,
+    //! so the line only appears where there is cloud.
+    function drawCloudBand(dc, cover, baseRadius, grey, bg) {
+        if (cover == null || cover.size() < 2) {
             return;
         }
 
-        // Treat the rim as the horizon: rain hugs it, clouds float in the sky
-        // above it (further inward). Higher cloud sits further toward centre;
-        // low cloud hovers just above the rain band (heavy rain reaches ~0.86R).
-        var n = density.size() < 12 ? density.size() : 12;
-        var rLow = _radius * 0.83;        // low cloud, just above the rain
-        var rHigh = _radius * 0.68;       // high cloud, floats further in
-        var minHalf = _radius * 0.004;    // hairline when clear
-        var maxHalf = _radius * 0.018;    // soft band when overcast
+        var n = cover.size() < 12 ? cover.size() : 12;
+        var minHalf = _radius * 0.004;   // thin line at light cover
+        var maxHalf = _radius * 0.022;   // fat soft band when overcast
 
-        var rc = new [n];   // centre radius (height)
-        var hw = new [n];   // half-thickness (density)
+        var hw = new [n];
         for (var i = 0; i < n; i++) {
-            var h = height[i];
-            if (h == null) { h = 0.5; }
-            if (h < 0.0) { h = 0.0; } else if (h > 1.0) { h = 1.0; }
-            rc[i] = rLow + (rHigh - rLow) * h;
-
-            var d = density[i];
-            if (d == null) { d = 0; }
-            if (d < 0) { d = 0; } else if (d > 100) { d = 100; }
-            hw[i] = minHalf + (maxHalf - minHalf) * (d / 100.0);
+            var c = cover[i];
+            if (c == null || c < 0) {
+                c = 0;
+            } else if (c > 100) {
+                c = 100;
+            }
+            hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
         }
 
-        var grey = dimColor(0xCCCCCC);
-        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
-        var sub = 3;
-        var layers = 5;
+        var sub = 2;
+        var layers = 3;
         for (var i = 0; i < n - 1; i++) {
+            if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
+                continue;  // no cloud across this segment
+            }
             for (var s = 0; s < sub; s++) {
                 var t0 = s * 1.0 / sub;
                 var t1 = (s + 1) * 1.0 / sub;
@@ -219,8 +226,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var cosA = Math.cos(angA);
                 var sinB = Math.sin(angB);
                 var cosB = Math.cos(angB);
-                var rcA = rc[i] + (rc[i + 1] - rc[i]) * t0;
-                var rcB = rc[i] + (rc[i + 1] - rc[i]) * t1;
                 var hwA = hw[i] + (hw[i + 1] - hw[i]) * t0;
                 var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
 
@@ -231,17 +236,17 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
                     // Outer half of the band.
                     dc.fillPolygon([
-                        [_centerX + (rcA + hwA * g0) * sinA, _centerY - (rcA + hwA * g0) * cosA],
-                        [_centerX + (rcB + hwB * g0) * sinB, _centerY - (rcB + hwB * g0) * cosB],
-                        [_centerX + (rcB + hwB * g1) * sinB, _centerY - (rcB + hwB * g1) * cosB],
-                        [_centerX + (rcA + hwA * g1) * sinA, _centerY - (rcA + hwA * g1) * cosA]
+                        [_centerX + (baseRadius + hwA * g0) * sinA, _centerY - (baseRadius + hwA * g0) * cosA],
+                        [_centerX + (baseRadius + hwB * g0) * sinB, _centerY - (baseRadius + hwB * g0) * cosB],
+                        [_centerX + (baseRadius + hwB * g1) * sinB, _centerY - (baseRadius + hwB * g1) * cosB],
+                        [_centerX + (baseRadius + hwA * g1) * sinA, _centerY - (baseRadius + hwA * g1) * cosA]
                     ]);
                     // Inner half of the band.
                     dc.fillPolygon([
-                        [_centerX + (rcA - hwA * g1) * sinA, _centerY - (rcA - hwA * g1) * cosA],
-                        [_centerX + (rcB - hwB * g1) * sinB, _centerY - (rcB - hwB * g1) * cosB],
-                        [_centerX + (rcB - hwB * g0) * sinB, _centerY - (rcB - hwB * g0) * cosB],
-                        [_centerX + (rcA - hwA * g0) * sinA, _centerY - (rcA - hwA * g0) * cosA]
+                        [_centerX + (baseRadius - hwA * g1) * sinA, _centerY - (baseRadius - hwA * g1) * cosA],
+                        [_centerX + (baseRadius - hwB * g1) * sinB, _centerY - (baseRadius - hwB * g1) * cosB],
+                        [_centerX + (baseRadius - hwB * g0) * sinB, _centerY - (baseRadius - hwB * g0) * cosB],
+                        [_centerX + (baseRadius - hwA * g0) * sinA, _centerY - (baseRadius - hwA * g0) * cosA]
                     ]);
                 }
             }

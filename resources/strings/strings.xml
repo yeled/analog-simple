@@ -15,7 +15,7 @@
     <string id="ShowRainForecastTitle">Rain Forecast Ticks</string>
     <string id="ShowRainForecastPrompt">Show the next 12 hours of rain amount as a blue band around the bezel that deepens with heavier rain (12 o'clock = soonest hour, clockwise). Uses Open-Meteo; needs location and a phone connection to refresh.</string>
     <string id="ShowCloudCoverTitle">Cloud Cover Line</string>
-    <string id="ShowCloudCoverPrompt">Show cloud cover as a grey line near the bezel: it sits higher or lower for high or low cloud, and thickens with density.</string>
+    <string id="ShowCloudCoverPrompt">Show cloud cover as three grey lines (low, mid, high altitude) — higher cloud sits closer to the centre, and each line thickens with that layer's coverage.</string>
     <string id="RingDataSourceTitle">Battery Ring Source</string>
     <string id="RingColorByLevelTitle">Color Ring By Level</string>
     <string id="ColorblindModeTitle">Colorblind Mode</string>

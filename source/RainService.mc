@@ -7,10 +7,13 @@ import Toybox.Time;
 //! Fetches the hourly precipitation amount (mm) forecast from Open-Meteo
 //! using the ECMWF model and caches it for the watch face to draw.
 //!
-//! Stored to Application.Storage (shared between background and foreground):
-//!   "rain_hourly"  => Array<Float>  next 12 hours of precipitation in mm,
-//!                                    starting at the current hour
-//!   "rain_updated" => Number        epoch seconds of the last good fetch
+//! Stored to Application.Storage (shared between background and foreground),
+//! each the next 12 hours starting at the current hour:
+//!   "rain_hourly"  => Array<Float>   precipitation in mm
+//!   "cloud_low"    => Array<Number>  low-altitude cloud cover 0-100
+//!   "cloud_mid"    => Array<Number>  mid-altitude cloud cover 0-100
+//!   "cloud_high"   => Array<Number>  high-altitude cloud cover 0-100
+//!   "rain_updated" => Number         epoch seconds of the last good fetch
 (:background)
 class RainService {
 
@@ -45,7 +48,6 @@ class RainService {
         var precip = hourly.get("precipitation") as Array?;
         if (times == null || precip == null) { return; }
 
-        var cloud = hourly.get("cloud_cover") as Array?;
         var cloudLow = hourly.get("cloud_cover_low") as Array?;
         var cloudMid = hourly.get("cloud_cover_mid") as Array?;
         var cloudHigh = hourly.get("cloud_cover_high") as Array?;
@@ -64,25 +66,21 @@ class RainService {
         }
 
         var rain = [] as Array<Float>;
-        var density = [] as Array<Number>;   // total cloud cover 0-100
-        var height = [] as Array<Float>;     // 0 = low cloud, 1 = high cloud
+        var low = [] as Array<Number>;    // low-altitude cloud cover 0-100
+        var mid = [] as Array<Number>;    // mid-altitude cloud cover 0-100
+        var high = [] as Array<Number>;   // high-altitude cloud cover 0-100
         for (var i = start; i < times.size() && rain.size() < 12; i++) {
             var mm = precip[i];
             rain.add(mm == null ? 0.0 : (mm as Float).toFloat());
-
-            density.add(num(cloud, i));
-            // Weight the altitude bands by their coverage to get a single
-            // representative cloud height fraction.
-            var lo = num(cloudLow, i);
-            var mi = num(cloudMid, i);
-            var hi = num(cloudHigh, i);
-            var total = lo + mi + hi;
-            height.add(total > 0 ? (0.1 * lo + 0.5 * mi + 0.9 * hi) / total : 0.5);
+            low.add(num(cloudLow, i));
+            mid.add(num(cloudMid, i));
+            high.add(num(cloudHigh, i));
         }
 
         Application.Storage.setValue("rain_hourly", rain);
-        Application.Storage.setValue("cloud_density", density);
-        Application.Storage.setValue("cloud_height", height);
+        Application.Storage.setValue("cloud_low", low);
+        Application.Storage.setValue("cloud_mid", mid);
+        Application.Storage.setValue("cloud_high", high);
         Application.Storage.setValue("rain_updated", now);
     }
 
