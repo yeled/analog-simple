@@ -28,7 +28,7 @@ class RainService {
                 "hourly"         => "precipitation,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high",
                 "models"         => "ecmwf_ifs",
                 "timeformat"     => "unixtime",
-                "forecast_hours"  => 12
+                "forecast_hours"  => 13
             },
             { :method => Communications.HTTP_REQUEST_METHOD_GET,
               :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON },
@@ -69,7 +69,7 @@ class RainService {
         var low = [] as Array<Number>;    // low-altitude cloud cover 0-100
         var mid = [] as Array<Number>;    // mid-altitude cloud cover 0-100
         var high = [] as Array<Number>;   // high-altitude cloud cover 0-100
-        for (var i = start; i < times.size() && rain.size() < 12; i++) {
+        for (var i = start; i < times.size() && rain.size() < 13; i++) {
             var mm = precip[i];
             rain.add(mm == null ? 0.0 : (mm as Float).toFloat());
             low.add(num(cloudLow, i));

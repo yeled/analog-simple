@@ -106,7 +106,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             return;
         }
 
-        var n = hourly.size() < 12 ? hourly.size() : 12;
+        var n = hourly.size() < 13 ? hourly.size() : 13;
         var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
         var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
         var maxDepth = _radius * 0.13;
@@ -196,7 +196,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             return;
         }
 
-        var n = cover.size() < 12 ? cover.size() : 12;
+        var n = cover.size() < 13 ? cover.size() : 13;
         var minHalf = _radius * 0.004;   // thin line at light cover
         var maxHalf = _radius * 0.022;   // fat soft band when overcast
 
