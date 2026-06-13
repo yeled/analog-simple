@@ -48,6 +48,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.clear();
 
         drawTicks(dc);
+        drawRainForecast(dc);
         drawBatteryRing(dc);
         drawHands(dc);
     }
@@ -84,6 +85,64 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
             dc.setPenWidth(isMajor ? 4 : 2);
             dc.drawLine(x1, y1, x2, y2);
+        }
+    }
+
+    //! Draw the next 12 hours of rain *amount* (mm) as a solid blue ribbon
+    //! just inside the bezel: a continuous band whose inner edge pulls inward
+    //! with the hourly precipitation amount (a thin ring when dry, a deep
+    //! bulge for heavy rain). 12 o'clock is the soonest hour, going clockwise;
+    //! the band spans 11 hours and stops short of wrapping past 12 o'clock so
+    //! the start and end don't touch. Data comes from RainService (Open-Meteo,
+    //! cached in Application.Storage).
+    function drawRainForecast(dc) {
+        if (!getBooleanProperty("ShowRainForecast", true)) {
+            return;
+        }
+
+        var hourly = Application.Storage.getValue("rain_hourly");
+        if (hourly == null || hourly.size() < 2) {
+            return;
+        }
+
+        var n = hourly.size() < 12 ? hourly.size() : 12;
+        var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
+        var outerRadius = _radius * 0.95;
+        var minDepth = _radius * 0.012;   // thin ring even when dry
+        var maxDepth = _radius * 0.16;
+
+        // Inner-edge radius for each hour.
+        var inner = new [n];
+        for (var i = 0; i < n; i++) {
+            var mm = hourly[i];
+            var frac = (mm == null) ? 0.0 : mm / maxMm;
+            if (frac > 1.0) {
+                frac = 1.0;
+            } else if (frac < 0.0) {
+                frac = 0.0;
+            }
+            inner[i] = outerRadius - (minDepth + frac * (maxDepth - minDepth));
+        }
+
+        // Fill the band as smooth quads between consecutive hours.
+        dc.setColor(dimColor(0x4DA6FF), Graphics.COLOR_TRANSPARENT);
+        var sub = 5;
+        for (var i = 0; i < n - 1; i++) {
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var angA = (i + t0) * Math.PI / 6.0;
+                var angB = (i + t1) * Math.PI / 6.0;
+                var rA = inner[i] + (inner[i + 1] - inner[i]) * t0;
+                var rB = inner[i] + (inner[i + 1] - inner[i]) * t1;
+
+                dc.fillPolygon([
+                    [_centerX + outerRadius * Math.sin(angA), _centerY - outerRadius * Math.cos(angA)],
+                    [_centerX + outerRadius * Math.sin(angB), _centerY - outerRadius * Math.cos(angB)],
+                    [_centerX + rB * Math.sin(angB), _centerY - rB * Math.cos(angB)],
+                    [_centerX + rA * Math.sin(angA), _centerY - rA * Math.cos(angA)]
+                ]);
+            }
         }
     }
 

@@ -1,7 +1,7 @@
 <strings>
     <string id="AppName">Analog Simple</string>
     <!-- Bumped on every .iq (store) build; keep in sync with the git tag -->
-    <string id="AppVersion">1.0.4</string>
+    <string id="AppVersion">1.0.6</string>
 
     <!-- Setting titles -->
     <string id="HandStyleTitle">Hand Style</string>
@@ -12,6 +12,8 @@
     <string id="BackgroundColorTitle">Background Color</string>
     <string id="TickColorTitle">Tick Mark Color</string>
     <string id="DateColorTitle">Date Color</string>
+    <string id="ShowRainForecastTitle">Rain Forecast Ticks</string>
+    <string id="ShowRainForecastPrompt">Show the next 12 hours of rain amount as a blue band around the bezel that deepens with heavier rain (12 o'clock = soonest hour, clockwise). Uses Open-Meteo; needs location and a phone connection to refresh.</string>
     <string id="RingDataSourceTitle">Battery Ring Source</string>
     <string id="RingColorByLevelTitle">Color Ring By Level</string>
     <string id="ColorblindModeTitle">Colorblind Mode</string>
