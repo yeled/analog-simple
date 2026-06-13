@@ -24,9 +24,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _centerY = 0;
     private var _radius = 0;
     private var _isAwake = true;
+    private var _hasAlpha = false;
 
     function initialize() {
         WatchFace.initialize();
+        _hasAlpha = (Graphics has :createColor);
     }
 
     function onLayout(dc) {
@@ -157,7 +159,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                     var rB0 = outerRadius + depthB * f0;
                     var rB1 = outerRadius + depthB * f1;
 
-                    dc.setColor(lerpColor(blue, bg, (f0 + f1) / 2.0), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(bandColor(blue, bg, (f0 + f1) / 2.0), Graphics.COLOR_TRANSPARENT);
                     dc.fillPolygon([
                         [_centerX + rA0 * sinA, _centerY - rA0 * cosA],
                         [_centerX + rB0 * sinB, _centerY - rB0 * cosB],
@@ -233,7 +235,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 for (var k = 0; k < layers; k++) {
                     var g0 = k * 1.0 / layers;
                     var g1 = (k + 1) * 1.0 / layers;
-                    dc.setColor(lerpColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(bandColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
 
                     // Outer half of the band.
                     dc.fillPolygon([
@@ -591,6 +593,24 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var g = ((color >> 8) & 0xFF) * pct / 100;
         var b = (color & 0xFF) * pct / 100;
         return (r << 16) + (g << 8) + b;
+    }
+
+    //! Colour for a gradient layer fading out by `fade` (0 = solid base,
+    //! 1 = gone). With alpha support the base colour is drawn at decreasing
+    //! opacity so overlapping bands blend (stack); otherwise it falls back to
+    //! lerping toward the background, which only looks right where bands don't
+    //! overlap.
+    function bandColor(base, bg, fade) {
+        if (fade < 0.0) {
+            fade = 0.0;
+        } else if (fade > 1.0) {
+            fade = 1.0;
+        }
+        if (_hasAlpha) {
+            var a = ((1.0 - fade) * 255).toNumber();
+            return Graphics.createColor(a, (base >> 16) & 0xFF, (base >> 8) & 0xFF, base & 0xFF);
+        }
+        return lerpColor(base, bg, fade);
     }
 
     //! Linearly blend two 24-bit RGB colors; t=0 returns c0, t=1 returns c1.
