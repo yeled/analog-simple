@@ -23,7 +23,7 @@ class RainService {
                 "latitude"       => lat,
                 "longitude"      => lon,
                 "hourly"         => "precipitation,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high",
-                "models"         => "ecmwf_ifs025",
+                "models"         => "ecmwf_ifs",
                 "timeformat"     => "unixtime",
                 "forecast_days"  => 2
             },
