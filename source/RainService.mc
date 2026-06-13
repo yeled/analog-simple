@@ -25,7 +25,7 @@ class RainService {
                 "hourly"         => "precipitation,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high",
                 "models"         => "ecmwf_ifs",
                 "timeformat"     => "unixtime",
-                "forecast_days"  => 2
+                "forecast_hours"  => 12
             },
             { :method => Communications.HTTP_REQUEST_METHOD_GET,
               :responseType => Communications.HTTP_RESPONSE_CONTENT_TYPE_JSON },
