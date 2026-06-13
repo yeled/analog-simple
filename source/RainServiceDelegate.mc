@@ -31,9 +31,15 @@ class RainServiceDelegate extends System.ServiceDelegate {
         new RainService().fetch(loc[0], loc[1]);
     }
 
-    //! [lat, lon] in degrees, preferring the device's last known GPS fix and
-    //! falling back to the synced weather observation location. Null if neither.
+    //! [lat, lon] in degrees. Prefers the manual "lat,long" override from
+    //! settings, then the device's last known GPS fix, then the synced weather
+    //! observation location. Null if none are available.
     hidden function resolveLocation() as Array<Float>? {
+        var override = parseOverride(Application.Properties.getValue("LocationOverride"));
+        if (override != null) {
+            return override;
+        }
+
         var info = Position.getInfo();
         if (info != null && info.position != null) {
             var deg = info.position.toDegrees();
@@ -51,5 +57,23 @@ class RainServiceDelegate extends System.ServiceDelegate {
         }
 
         return null;
+    }
+
+    //! Parse a "lat,long" override string into [lat, lon], or null if empty
+    //! or malformed.
+    hidden function parseOverride(value) as Array<Float>? {
+        if (!(value instanceof String) || value.length() == 0) {
+            return null;
+        }
+        var comma = value.find(",");
+        if (comma == null || comma <= 0) {
+            return null;
+        }
+        var lat = value.substring(0, comma).toFloat();
+        var lon = value.substring(comma + 1, value.length()).toFloat();
+        if (lat == null || lon == null) {
+            return null;
+        }
+        return [lat, lon];
     }
 }
