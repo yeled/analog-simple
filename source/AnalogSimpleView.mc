@@ -11,6 +11,7 @@ import Toybox.WatchUi;
 const HAND_STYLE_CLASSIC = 0;
 const HAND_STYLE_SWORD = 1;
 const HAND_STYLE_DIAMOND = 2;
+const HAND_STYLE_ROUNDED = 3;
 
 // Battery ring data source options
 const RING_SOURCE_BODY_BATTERY = 0;
@@ -266,7 +267,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var hourAngle = (hour + minute / 60.0) * Math.PI / 6.0;
         var minuteAngle = (minute + second / 60.0) * Math.PI / 30.0;
 
-        var handStyle = getNumberProperty("HandStyle", HAND_STYLE_CLASSIC);
+        var handStyle = getNumberProperty("HandStyle", HAND_STYLE_ROUNDED);
 
         var hourColor = getColorProperty("HourHandColor", Graphics.COLOR_WHITE);
         var minuteColor = getColorProperty("MinuteHandColor", Graphics.COLOR_WHITE);
@@ -292,6 +293,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     //! Build and draw a hand polygon for the requested style
     function drawHand(dc, angle, length, width, style, color) {
+        if (style == HAND_STYLE_ROUNDED) {
+            drawRoundedHand(dc, angle, length, width, color);
+            return;
+        }
+
         var tail = _radius * 0.15;
         var points;
 
@@ -353,6 +359,44 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             var p1 = shape[(i + 1) % shape.size()];
             dc.drawLine(p0[0], p0[1], p1[0], p1[1]);
         }
+    }
+
+    //! Draw a rounded "lume" hand: a capsule (rounded ends) in the hand colour
+    //! with a thinner rounded channel of background colour down the middle,
+    //! inset from the ends so the tip and base stay solid. A slightly larger
+    //! background capsule underneath keeps overlapping hands separated.
+    function drawRoundedHand(dc, angle, length, width, color) {
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var tail = _radius * 0.15;
+
+        var ends = rotatePoints([[0, tail], [0, -length]], angle);
+        var base = ends[0];
+        var tip = ends[1];
+
+        var w = width.toNumber();
+        if (w < 2) { w = 2; }
+        var half = w / 2;
+
+        // Background outline capsule (slightly larger) for separation.
+        capsule(dc, base, tip, w + 2, half + 1, bg);
+        // Body capsule.
+        capsule(dc, base, tip, w, half, color);
+
+        // Lume channel: thinner capsule, inset from both ends.
+        var lumeEnds = rotatePoints([[0, tail - width], [0, -(length - width)]], angle);
+        var lw = (width * 0.42).toNumber();
+        if (lw < 2) { lw = 2; }
+        capsule(dc, lumeEnds[0], lumeEnds[1], lw, lw / 2, bg);
+    }
+
+    //! Draw a filled capsule (thick line with rounded ends) of the given
+    //! pen width and end radius, in one colour.
+    function capsule(dc, p0, p1, penWidth, endRadius, color) {
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(penWidth);
+        dc.drawLine(p0[0], p0[1], p1[0], p1[1]);
+        dc.fillCircle(p0[0], p0[1], endRadius);
+        dc.fillCircle(p1[0], p1[1], endRadius);
     }
 
     //! Draw a thin second hand with a small counterweight tail

@@ -1,7 +1,7 @@
 <properties>
 
     <!-- Hands -->
-    <property id="HandStyle" type="number">0</property>
+    <property id="HandStyle" type="number">3</property>
     <property id="HandLength" type="number">100</property>
     <property id="HourHandColor" type="number">0xFFFFFF</property>
     <property id="MinuteHandColor" type="number">0xFFFFFF</property>

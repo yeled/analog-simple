@@ -35,6 +35,7 @@
     <string id="HandStyleClassic">Classic</string>
     <string id="HandStyleSword">Sword</string>
     <string id="HandStyleDiamond">Diamond</string>
+    <string id="HandStyleRounded">Rounded Lume</string>
 
     <!-- Hand length options -->
     <string id="HandLengthTitle">Hand Length</string>
