@@ -11,6 +11,7 @@ import Toybox.WatchUi;
 const HAND_STYLE_CLASSIC = 0;
 const HAND_STYLE_SWORD = 1;
 const HAND_STYLE_DIAMOND = 2;
+const HAND_STYLE_ROUNDED = 3;
 
 // Battery ring data source options
 const RING_SOURCE_BODY_BATTERY = 0;
@@ -24,9 +25,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _centerY = 0;
     private var _radius = 0;
     private var _isAwake = true;
+    private var _hasAlpha = false;
 
     function initialize() {
         WatchFace.initialize();
+        _hasAlpha = (Graphics has :createColor);
     }
 
     function onLayout(dc) {
@@ -107,9 +110,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         var n = hourly.size() < 13 ? hourly.size() : 13;
-        var maxMm = 4.0;                  // mm/hr mapping to the deepest bulge
+        var maxMm = 4.0;                  // mm/hr that maps to the deepest band
         var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
-        var maxDepth = _radius * 0.13;
+        var maxDepth = _radius * 0.30;    // exaggerated: 4mm+ reads as heavy
 
         // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
         // dry hour, so the blue band only appears where it actually rains.
@@ -157,7 +160,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                     var rB0 = outerRadius + depthB * f0;
                     var rB1 = outerRadius + depthB * f1;
 
-                    dc.setColor(lerpColor(blue, bg, (f0 + f1) / 2.0), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(bandColor(blue, bg, (f0 + f1) / 2.0), Graphics.COLOR_TRANSPARENT);
                     dc.fillPolygon([
                         [_centerX + rA0 * sinA, _centerY - rA0 * cosA],
                         [_centerX + rB0 * sinB, _centerY - rB0 * cosB],
@@ -182,10 +185,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var grey = dimColor(0xCCCCCC);
         var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
 
-        // Higher altitude band sits closer to the centre.
-        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.80, grey, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.66, grey, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.52, grey, bg);
+        // Higher altitude band sits closer to the centre. Radii are spaced so
+        // the thick bands overlap a little, stacking the grey gradients.
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, grey, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, grey, bg);
     }
 
     //! Draw one cloud band: a soft grey line at a fixed radius whose thickness
@@ -197,8 +201,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         var n = cover.size() < 13 ? cover.size() : 13;
-        var minHalf = _radius * 0.004;   // thin line at light cover
-        var maxHalf = _radius * 0.022;   // fat soft band when overcast
+        var minHalf = _radius * 0.006;   // thin line at light cover
+        var maxHalf = _radius * 0.065;   // exaggerated: 100% reads as heavy
 
         var hw = new [n];
         for (var i = 0; i < n; i++) {
@@ -232,7 +236,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 for (var k = 0; k < layers; k++) {
                     var g0 = k * 1.0 / layers;
                     var g1 = (k + 1) * 1.0 / layers;
-                    dc.setColor(lerpColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(bandColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
 
                     // Outer half of the band.
                     dc.fillPolygon([
@@ -263,7 +267,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var hourAngle = (hour + minute / 60.0) * Math.PI / 6.0;
         var minuteAngle = (minute + second / 60.0) * Math.PI / 30.0;
 
-        var handStyle = getNumberProperty("HandStyle", HAND_STYLE_CLASSIC);
+        var handStyle = getNumberProperty("HandStyle", HAND_STYLE_ROUNDED);
 
         var hourColor = getColorProperty("HourHandColor", Graphics.COLOR_WHITE);
         var minuteColor = getColorProperty("MinuteHandColor", Graphics.COLOR_WHITE);
@@ -289,6 +293,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     //! Build and draw a hand polygon for the requested style
     function drawHand(dc, angle, length, width, style, color) {
+        if (style == HAND_STYLE_ROUNDED) {
+            drawRoundedHand(dc, angle, length, width, color);
+            return;
+        }
+
         var tail = _radius * 0.15;
         var points;
 
@@ -350,6 +359,44 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             var p1 = shape[(i + 1) % shape.size()];
             dc.drawLine(p0[0], p0[1], p1[0], p1[1]);
         }
+    }
+
+    //! Draw a rounded "lume" hand: a capsule (rounded ends) in the hand colour
+    //! with a thinner rounded channel of background colour down the middle,
+    //! inset from the ends so the tip and base stay solid. A slightly larger
+    //! background capsule underneath keeps overlapping hands separated.
+    function drawRoundedHand(dc, angle, length, width, color) {
+        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var tail = _radius * 0.15;
+
+        var ends = rotatePoints([[0, tail], [0, -length]], angle);
+        var base = ends[0];
+        var tip = ends[1];
+
+        var w = width.toNumber();
+        if (w < 2) { w = 2; }
+        var half = w / 2;
+
+        // Background outline capsule (slightly larger) for separation.
+        capsule(dc, base, tip, w + 2, half + 1, bg);
+        // Body capsule.
+        capsule(dc, base, tip, w, half, color);
+
+        // Lume channel: thinner capsule, inset from both ends.
+        var lumeEnds = rotatePoints([[0, tail - width], [0, -(length - width)]], angle);
+        var lw = (width * 0.42).toNumber();
+        if (lw < 2) { lw = 2; }
+        capsule(dc, lumeEnds[0], lumeEnds[1], lw, lw / 2, bg);
+    }
+
+    //! Draw a filled capsule (thick line with rounded ends) of the given
+    //! pen width and end radius, in one colour.
+    function capsule(dc, p0, p1, penWidth, endRadius, color) {
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(penWidth);
+        dc.drawLine(p0[0], p0[1], p1[0], p1[1]);
+        dc.fillCircle(p0[0], p0[1], endRadius);
+        dc.fillCircle(p1[0], p1[1], endRadius);
     }
 
     //! Draw a thin second hand with a small counterweight tail
@@ -590,6 +637,24 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var g = ((color >> 8) & 0xFF) * pct / 100;
         var b = (color & 0xFF) * pct / 100;
         return (r << 16) + (g << 8) + b;
+    }
+
+    //! Colour for a gradient layer fading out by `fade` (0 = solid base,
+    //! 1 = gone). With alpha support the base colour is drawn at decreasing
+    //! opacity so overlapping bands blend (stack); otherwise it falls back to
+    //! lerping toward the background, which only looks right where bands don't
+    //! overlap.
+    function bandColor(base, bg, fade) {
+        if (fade < 0.0) {
+            fade = 0.0;
+        } else if (fade > 1.0) {
+            fade = 1.0;
+        }
+        if (_hasAlpha) {
+            var a = ((1.0 - fade) * 255).toNumber();
+            return Graphics.createColor(a, (base >> 16) & 0xFF, (base >> 8) & 0xFF, base & 0xFF);
+        }
+        return lerpColor(base, bg, fade);
     }
 
     //! Linearly blend two 24-bit RGB colors; t=0 returns c0, t=1 returns c1.
