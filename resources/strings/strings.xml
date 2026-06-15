@@ -16,8 +16,6 @@
     <string id="ShowRainForecastPrompt">Show the next 12 hours of rain amount as a blue band around the bezel that deepens with heavier rain (12 o'clock = soonest hour, clockwise). Uses Open-Meteo; needs location and a phone connection to refresh.</string>
     <string id="ShowCloudCoverTitle">Cloud Cover</string>
     <string id="ShowCloudCoverPrompt">Show cloud cover as three grey lines (low, mid, high altitude) — higher cloud sits closer to the centre, and each line thickens with that layer's coverage.</string>
-    <string id="CloudCoverRippleTitle">Cloud Color Ripple</string>
-    <string id="CloudCoverRipplePrompt">Vary each cloud line's colour in waves along the ring instead of a flat tint. Turn off if it causes Always-On Display to shut off due to the extra drawing work.</string>
     <string id="LocationOverrideTitle">Location Override</string>
     <string id="LocationOverridePrompt">Force the weather location as "latitude,longitude" (e.g. 51.5,-0.12). Leave blank to use the watch's GPS or synced weather location.</string>
     <string id="RingDataSourceTitle">Battery Ring Source</string>
