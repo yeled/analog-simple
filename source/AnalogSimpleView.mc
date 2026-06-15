@@ -221,26 +221,30 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         drawBatteryRing(dc);
     }
 
-    //! Low-power weather for always-on mode. Instead of the filled bands
-    //! (whose lit area grows with coverage — worst exactly when overcast),
-    //! the three real cloud bands are drawn as outlines with sparse dashed
-    //! hatching inside, so most of the band stays dark and the lit cost barely
-    //! changes with coverage. Rain is a thin stroke along the band's inner
-    //! edge for rainy hours.
+    //! Low-power weather for always-on mode. The three real cloud bands are
+    //! drawn as solid fills like the awake face, but in a single dim grey:
+    //! the low brightness (not a smaller lit area) is what keeps the
+    //! always-on power budget in check. Rain is a thin stroke along the
+    //! band's inner edge for rainy hours.
     private function drawWeatherAod(dc) {
         if (_showCloud) {
+            // Solid contiguous fills; turn AA off so the sub-step quads don't
+            // leave seam lines between them.
+            var hadAA = (dc has :setAntiAlias);
+            if (hadAA) { dc.setAntiAlias(false); }
             drawCloudBandAod(dc, Application.Storage.getValue("cloud_low"),  _radius * 0.78);
             drawCloudBandAod(dc, Application.Storage.getValue("cloud_mid"),  _radius * 0.64);
             drawCloudBandAod(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50);
+            if (hadAA) { dc.setAntiAlias(true); }
         }
         if (_showRain) {
             drawRainAodOutline(dc);
         }
     }
 
-    //! One cloud band in low-power mode: a thin outline (inner + outer edges)
-    //! with short radial hatch dashes inside. Curves are subdivided per hour
-    //! to round off the polygon facets. Hours with no cloud are skipped.
+    //! One cloud band in low-power mode: a solid dim-grey fill from the inner
+    //! to the outer edge, subdivided per hour to round the facets. Hours with
+    //! no cloud are skipped.
     private function drawCloudBandAod(dc, cover, baseRadius) {
         if (cover == null || cover.size() < 2) {
             return;
@@ -257,14 +261,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
         }
 
-        // Dim grey keeps emitted light (and power) low in AOD.
-        dc.setColor(dimColor(0x808080), Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(2);
+        // A single dim grey; dim pixels draw little power on AMOLED.
+        dc.setColor(dimColor(0x303030), Graphics.COLOR_TRANSPARENT);
 
-        var sub = 4;                 // sub-steps per hour, to round the facets
-        var hatchEvery = 1;          // a radial dash every Nth sub-step
-        var hatchMin = minHalf * 2;  // only hatch where the band has some width
-        var step = 0;
+        var sub = 4;   // sub-steps per hour, to round the facets
         for (var i = 0; i < n - 1; i++) {
             if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
                 continue;  // gap where there's no cloud
@@ -281,18 +281,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
                 var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
 
-                // Outer and inner edge segments (the outline).
-                dc.drawLine(_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0,
-                            _centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1);
-                dc.drawLine(_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0,
-                            _centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1);
-
-                // Radial hatch dash bridging the two edges.
-                if (step % hatchEvery == 0 && h0 > hatchMin) {
-                    dc.drawLine(_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0,
-                                _centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0);
-                }
-                step++;
+                dc.fillPolygon([
+                    [_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0],
+                    [_centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1],
+                    [_centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1],
+                    [_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0]
+                ]);
             }
         }
     }
