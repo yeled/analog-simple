@@ -27,9 +27,50 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _isAwake = true;
     private var _hasAlpha = false;
 
+    // Precomputed sin/cos for the 12 hour positions (filled in onLayout) so
+    // the fixed tick geometry isn't recomputed every frame.
+    private var _tickSin = null;
+    private var _tickCos = null;
+
+    // Cached settings, refreshed in cacheSettings() rather than read from
+    // Application.Properties on every draw. Colours are pre-dimmed.
+    private var _brightness = 60;
+    private var _bgColor = 0x000000;
+    private var _tickColor = 0xAAAAAA;
+    private var _hourColor = 0xFFFFFF;
+    private var _minuteColor = 0xFFFFFF;
+    private var _secondColor = 0xFF5500;
+    private var _dateColor = 0xFFFFFF;
+    private var _handStyle = HAND_STYLE_ROUNDED;
+    private var _lengthScale = 1.0;
+    private var _showSecondHand = true;
+    private var _showRain = true;
+    private var _showCloud = true;
+    private var _cloudRipple = true;
+    private var _ringSource = RING_SOURCE_BODY_BATTERY;
+    private var _ringByLevel = true;
+    private var _ringColor = 0x00FFFF;
+    private var _colorblind = false;
+
+    // Offscreen buffer holding the static layer (background, ticks, weather
+    // rings, battery ring). Rebuilt only when its inputs change; each frame
+    // just blits it and draws the live hands on top. Null if the device has
+    // no buffer support or allocation failed, in which case we draw direct.
+    private var _buffer = null;
+    private var _bufferValid = false;
+    private var _bufferMinute = -1;
+    private var _bufferRainStamp = null;
+    private var _bufferAwake = true;
+
+    // Throttled battery-ring percentage so the Body Battery history isn't
+    // re-queried more than once a minute.
+    private var _ringPercent = 0;
+    private var _ringPercentTime = -1;
+
     function initialize() {
         WatchFace.initialize();
         _hasAlpha = (Graphics has :createColor);
+        cacheSettings();
     }
 
     function onLayout(dc) {
@@ -38,23 +79,135 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         _centerX = _screenWidth / 2.0;
         _centerY = _screenHeight / 2.0;
         _radius = (_screenWidth < _screenHeight ? _screenWidth : _screenHeight) / 2.0;
+
+        _tickSin = new [12];
+        _tickCos = new [12];
+        for (var i = 0; i < 12; i++) {
+            var angle = i * Math.PI / 6.0;
+            _tickSin[i] = Math.sin(angle);
+            _tickCos[i] = Math.cos(angle);
+        }
+
+        // Screen size is known now; drop any buffer so it's reallocated.
+        _buffer = null;
+        _bufferValid = false;
     }
 
     function onShow() {
     }
 
-    function onUpdate(dc) {
-        var backgroundColor = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+    //! Re-read all settings into member variables and invalidate the static
+    //! buffer. Called once at startup and from the app's onSettingsChanged.
+    function onSettingsUpdate() {
+        cacheSettings();
+    }
 
-        dc.setAntiAlias(true);
-        dc.setColor(backgroundColor, backgroundColor);
+    private function cacheSettings() {
+        _brightness     = getNumberProperty("Brightness", 60);
+        _bgColor        = dimColor(getRawColor("BackgroundColor", Graphics.COLOR_BLACK));
+        _tickColor      = dimColor(getRawColor("TickColor", Graphics.COLOR_LT_GRAY));
+        _hourColor      = dimColor(getRawColor("HourHandColor", Graphics.COLOR_WHITE));
+        _minuteColor    = dimColor(getRawColor("MinuteHandColor", Graphics.COLOR_WHITE));
+        _secondColor    = dimColor(getRawColor("SecondHandColor", Graphics.COLOR_ORANGE));
+        _dateColor      = dimColor(getRawColor("DateColor", Graphics.COLOR_WHITE));
+        _handStyle      = getNumberProperty("HandStyle", HAND_STYLE_ROUNDED);
+        _lengthScale    = getNumberProperty("HandLength", 100) / 100.0;
+        _showSecondHand = getBooleanProperty("ShowSecondHand", true);
+        _showRain       = getBooleanProperty("ShowRainForecast", true);
+        _showCloud      = getBooleanProperty("ShowCloudCover", true);
+        _cloudRipple    = getBooleanProperty("CloudCoverRipple", true);
+        _ringSource     = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
+        _ringByLevel    = getBooleanProperty("RingColorByLevel", true);
+        _ringColor      = dimColor(getRawColor("RingColor", Graphics.COLOR_BLUE));
+        _colorblind     = getBooleanProperty("ColorblindMode", false);
+
+        _ringPercentTime = -1;   // force a battery refresh on the next draw
+        _bufferValid = false;    // settings changed → rebuild the buffer
+    }
+
+    function onUpdate(dc) {
+        var clockTime = System.getClockTime();
+        var rainStamp = Application.Storage.getValue("rain_updated");
+
+        // Rebuild the static buffer only when something it depends on changed:
+        // settings, the displayed minute (battery/date), fresh weather data,
+        // or an awake/asleep transition (which changes band detail).
+        if (!_bufferValid
+                || clockTime.min != _bufferMinute
+                || rainStamp != _bufferRainStamp
+                || _isAwake != _bufferAwake) {
+            rebuildBuffer(clockTime, rainStamp);
+        }
+
+        if (_bufferValid && _buffer != null) {
+            dc.drawBitmap(0, 0, _buffer);
+        } else {
+            // No buffer (unsupported / allocation failed): draw direct.
+            drawStaticLayer(dc);
+        }
+
+        // Hands draw straight to the screen each frame, on top of the blit.
+        if (dc has :setAntiAlias) {
+            dc.setAntiAlias(true);
+        }
+        drawHands(dc);
+    }
+
+    //! (Re)allocate the offscreen buffer if needed and render the static layer
+    //! into it. Falls back to per-frame direct drawing if no buffer is
+    //! available.
+    private function rebuildBuffer(clockTime, rainStamp) {
+        ensureBuffer();
+        if (_buffer == null) {
+            _bufferValid = false;   // onUpdate will draw direct
+            return;
+        }
+
+        var bdc = _buffer.getDc();
+        drawStaticLayer(bdc);
+
+        _bufferValid = true;
+        _bufferMinute = clockTime.min;
+        _bufferRainStamp = rainStamp;
+        _bufferAwake = _isAwake;
+    }
+
+    //! Allocate the static-layer buffer once. Leaves _buffer null when the
+    //! device lacks buffer support or the allocation fails.
+    private function ensureBuffer() {
+        if (_buffer != null) {
+            return;
+        }
+        var opts = { :width => _screenWidth, :height => _screenHeight };
+        if (_hasAlpha && (Graphics has :ALPHA_BLENDING_FULL)) {
+            opts.put(:alphaBlending, Graphics.ALPHA_BLENDING_FULL);
+        }
+        if (Graphics has :createBufferedBitmap) {
+            var ref = Graphics.createBufferedBitmap(opts);
+            if (ref != null) {
+                _buffer = ref.get();
+            }
+        } else if (Graphics has :BufferedBitmap) {
+            _buffer = new Graphics.BufferedBitmap(opts);
+        }
+    }
+
+    //! Draw the background and everything that doesn't change every second.
+    private function drawStaticLayer(dc) {
+        if (dc has :setAntiAlias) {
+            dc.setAntiAlias(true);
+        }
+        dc.setColor(_bgColor, _bgColor);
         dc.clear();
 
         drawTicks(dc);
-        drawRainForecast(dc);
-        drawCloudCover(dc);
+        if (_showRain) {
+            drawRainForecast(dc);
+        }
+        if (_showCloud) {
+            drawCloudCover(dc);
+        }
         drawBatteryRing(dc);
-        drawHands(dc);
     }
 
     function onHide() {
@@ -62,22 +215,23 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     function onExitSleep() {
         _isAwake = true;
+        _bufferValid = false;
+        WatchUi.requestUpdate();
     }
 
     function onEnterSleep() {
         _isAwake = false;
+        _bufferValid = false;
         WatchUi.requestUpdate();
     }
 
     //! Draw the 12 hour tick marks around the bezel
     function drawTicks(dc) {
-        var tickColor = getColorProperty("TickColor", Graphics.COLOR_LT_GRAY);
-        dc.setColor(tickColor, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(_tickColor, Graphics.COLOR_TRANSPARENT);
 
         for (var i = 0; i < 12; i++) {
-            var angle = i * Math.PI / 6.0;
-            var sin = Math.sin(angle);
-            var cos = Math.cos(angle);
+            var sin = _tickSin[i];
+            var cos = _tickCos[i];
             var isMajor = (i % 3 == 0);
             var outerRadius = _radius * 0.96;
             var innerRadius = isMajor ? _radius * 0.85 : _radius * 0.91;
@@ -100,10 +254,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! the start and end don't touch. Data comes from RainService (Open-Meteo,
     //! cached in Application.Storage).
     function drawRainForecast(dc) {
-        if (!getBooleanProperty("ShowRainForecast", true)) {
-            return;
-        }
-
         var hourly = Application.Storage.getValue("rain_hourly");
         if (hourly == null || hourly.size() < 2) {
             return;
@@ -112,7 +262,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var n = hourly.size() < 13 ? hourly.size() : 13;
         var maxMm = 4.0;                  // mm/hr that maps to the deepest band
         var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
-        var maxDepth = _radius * 0.30;    // exaggerated: 4mm+ reads as heavy
+        // Shallower band in low-power mode lights fewer pixels for AOD.
+        var maxDepth = _radius * 0.30 * (_isAwake ? 1.0 : 0.6);
 
         // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
         // dry hour, so the blue band only appears where it actually rains.
@@ -133,7 +284,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         // transparent on a dark face). Each angular column is split into
         // radial layers, each lerped from blue toward the background.
         var blue = dimColor(0x4DA6FF);
-        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var bg = _bgColor;
         var sub = 3;       // angular sub-steps per hour
         var layers = 7;    // radial gradient bands
         for (var i = 0; i < n - 1; i++) {
@@ -181,20 +332,21 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! drawn for an hour whose coverage is 0%. Data from RainService
     //! (Open-Meteo).
     function drawCloudCover(dc) {
-        if (!getBooleanProperty("ShowCloudCover", true)) {
-            return;
-        }
-
-        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var bg = _bgColor;
         var rainMm = Application.Storage.getValue("rain_hourly");
         var rainChance = Application.Storage.getValue("rain_chance");
-        var ripple = getBooleanProperty("CloudCoverRipple", true);
+        // Ripple is extra draw work; skip it while asleep regardless of the
+        // user setting to ease the AOD power budget.
+        var ripple = _cloudRipple && _isAwake;
 
         // Many small adjacent fills make up each band; with anti-aliasing on,
         // each one gets its own blended edge against the background, leaving
         // a fine grid of seam lines between segments. Turn it off for these
         // fills and restore it afterwards for the ring and hands.
-        dc.setAntiAlias(false);
+        var hadAA = (dc has :setAntiAlias);
+        if (hadAA) {
+            dc.setAntiAlias(false);
+        }
 
         // Higher altitude band sits closer to the centre. Radii are spaced so
         // the thick bands overlap a little, stacking the gradients.
@@ -202,7 +354,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg, rainMm, rainChance, ripple);
         drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg, rainMm, rainChance, ripple);
 
-        dc.setAntiAlias(true);
+        if (hadAA) {
+            dc.setAntiAlias(true);
+        }
     }
 
     //! Draw one cloud band: a line at a fixed radius whose thickness tracks
@@ -220,7 +374,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = cover.size() < 13 ? cover.size() : 13;
         var minHalf = _radius * 0.006;   // thin line at light cover
-        var maxHalf = _radius * 0.065;   // exaggerated: 100% reads as heavy
+        // Thinner band while asleep lights fewer pixels for the AOD budget.
+        var maxHalf = _radius * 0.065 * (_isAwake ? 1.0 : 0.6);
 
         var hw = new [n];
         var cf = new [n];
@@ -285,10 +440,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 }
                 var base = dimColor(cloudColor(cf2, (sfA + sfB) / 2.0));
 
+                var fadeDenom = (layers > 1) ? (layers - 1) : 1;
                 for (var k = 0; k < layers; k++) {
                     var g0 = k * 1.0 / layers;
                     var g1 = (k + 1) * 1.0 / layers;
-                    dc.setColor(bandColor(base, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(bandColor(base, bg, k * 1.0 / fadeDenom), Graphics.COLOR_TRANSPARENT);
 
                     // Outer half of the band.
                     dc.fillPolygon([
@@ -332,27 +488,20 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var hourAngle = (hour + minute / 60.0) * Math.PI / 6.0;
         var minuteAngle = (minute + second / 60.0) * Math.PI / 30.0;
 
-        var handStyle = getNumberProperty("HandStyle", HAND_STYLE_ROUNDED);
-
-        var hourColor = getColorProperty("HourHandColor", Graphics.COLOR_WHITE);
-        var minuteColor = getColorProperty("MinuteHandColor", Graphics.COLOR_WHITE);
-        var lengthScale = getNumberProperty("HandLength", 100) / 100.0;
-
         // Hour hand
-        drawHand(dc, hourAngle, _radius * 0.5 * lengthScale, _radius * 0.08, handStyle, hourColor);
+        drawHand(dc, hourAngle, _radius * 0.5 * _lengthScale, _radius * 0.08, _handStyle, _hourColor);
 
         // Minute hand
-        drawHand(dc, minuteAngle, _radius * 0.82 * lengthScale, _radius * 0.08, handStyle, minuteColor);
+        drawHand(dc, minuteAngle, _radius * 0.82 * _lengthScale, _radius * 0.08, _handStyle, _minuteColor);
 
         // Second hand (skipped while sleeping to save power / avoid burn-in)
-        if (_isAwake && getBooleanProperty("ShowSecondHand", true)) {
+        if (_isAwake && _showSecondHand) {
             var secondAngle = second * Math.PI / 30.0;
-            var secondColor = getColorProperty("SecondHandColor", Graphics.COLOR_ORANGE);
-            drawSecondHand(dc, secondAngle, _radius * 0.9, secondColor);
+            drawSecondHand(dc, secondAngle, _radius * 0.9, _secondColor);
         }
 
         // Center cap
-        dc.setColor(hourColor, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(_hourColor, Graphics.COLOR_TRANSPARENT);
         dc.fillCircle(_centerX, _centerY, _radius * 0.035);
     }
 
@@ -399,7 +548,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.setColor(color, Graphics.COLOR_TRANSPARENT);
         dc.fillPolygon(shape);
 
-        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var bg = _bgColor;
 
         if (style == HAND_STYLE_SWORD) {
             // Transparent lume channel down the middle of the blade
@@ -431,7 +580,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! inset from the ends so the tip and base stay solid. A slightly larger
     //! background capsule underneath keeps overlapping hands separated.
     function drawRoundedHand(dc, angle, length, width, color) {
-        var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var bg = _bgColor;
         var tail = _radius * 0.15;
 
         var ends = rotatePoints([[0, tail], [0, -length]], angle);
@@ -518,10 +667,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var percent = getRingPercent();
 
         var ringColor;
-        if (getBooleanProperty("RingColorByLevel", true)) {
+        if (_ringByLevel) {
             ringColor = dimColor(levelColor(percent));
         } else {
-            ringColor = getColorProperty("RingColor", Graphics.COLOR_BLUE);
+            ringColor = _ringColor;
         }
 
         var perimeter = roundedSquarePerimeter(boxCenterX, boxCenterY, halfSize, cornerRadius);
@@ -603,20 +752,25 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     //! Draw the day of month inside the ring
     function drawDate(dc, centerX, centerY) {
-        var dateColor = getColorProperty("DateColor", Graphics.COLOR_WHITE);
         var today = Gregorian.info(Time.now(), Time.FORMAT_MEDIUM);
 
-        dc.setColor(dateColor, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(_dateColor, Graphics.COLOR_TRANSPARENT);
         dc.drawText(centerX, centerY, Graphics.FONT_XTINY, today.day.format("%d"),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     }
 
-    //! Pick the percentage to drive the ring based on the configured source
+    //! Pick the percentage to drive the ring based on the configured source.
+    //! The (relatively expensive) Body Battery history query is throttled to
+    //! once a minute; the level changes slowly enough that re-reading it more
+    //! often just wastes power.
     function getRingPercent() {
-        var source = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
-        var percent = null;
+        var now = Time.now().value();
+        if (_ringPercentTime >= 0 && (now - _ringPercentTime) < 60) {
+            return _ringPercent;
+        }
 
-        if (source == RING_SOURCE_WATCH_BATTERY) {
+        var percent = null;
+        if (_ringSource == RING_SOURCE_WATCH_BATTERY) {
             percent = getWatchBatteryPercent();
         } else {
             percent = getBodyBatteryPercent();
@@ -635,6 +789,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             percent = 100;
         }
 
+        _ringPercent = percent;
+        _ringPercentTime = now;
         return percent;
     }
 
@@ -674,7 +830,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! red / yellow / green; Colorblind Mode swaps to a red-green-safe
     //! red / amber / blue scale that also varies in lightness.
     function levelColor(percent) {
-        if (getBooleanProperty("ColorblindMode", false)) {
+        if (_colorblind) {
             if (percent <= 20) {
                 return 0xFF2222; // red
             } else if (percent <= 50) {
@@ -694,7 +850,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! Scale a 24-bit RGB color by the configured brightness percentage.
     //! Dimmer pixels draw less power on the Venu's AMOLED display.
     function dimColor(color) {
-        var pct = getNumberProperty("Brightness", 60);
+        var pct = _brightness;
         if (pct >= 100 || color <= 0) {
             return color;
         }
@@ -735,9 +891,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return (r << 16) + (g << 8) + b;
     }
 
-    function getColorProperty(key, defaultValue) {
+    //! Raw (undimmed) colour property value. cacheSettings applies dimColor.
+    function getRawColor(key, defaultValue) {
         var value = Application.Properties.getValue(key);
-        return dimColor((value != null) ? value : defaultValue);
+        return (value != null) ? value : defaultValue;
     }
 
     function getNumberProperty(key, defaultValue) {
