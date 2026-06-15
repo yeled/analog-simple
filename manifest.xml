@@ -3,12 +3,13 @@
     <iq:application id="b3a1e6c2-4f8d-4a2b-9c3e-7d6f5a8b9c12" type="watchface" name="@Strings.AppName" entry="AnalogSimpleApp" launcherIcon="@Drawables.LauncherIcon" minSdkVersion="4.2.0">
         <iq:products>
             <iq:product id="venu441mm"/>
+            <iq:product id="venu445mm"/>
         </iq:products>
         <iq:permissions>
-            <iq:uses-permission id="SensorHistory"/>
             <iq:uses-permission id="Background"/>
             <iq:uses-permission id="Communications"/>
             <iq:uses-permission id="Positioning"/>
+            <iq:uses-permission id="SensorHistory"/>
         </iq:permissions>
         <iq:languages>
             <iq:language>eng</iq:language>
