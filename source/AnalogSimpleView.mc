@@ -176,27 +176,42 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! altitude — each at its own fixed radius, with higher cloud nearer the
     //! centre (the rim is the horizon). A line's thickness tracks that band's
     //! hourly coverage, and its colour shifts from white (thin/wispy) through
-    //! grey to a blue-grey (thick/stormy); nothing is drawn for an hour whose
-    //! coverage is 0%. Data from RainService (Open-Meteo).
+    //! grey to a blue-grey (thick/stormy), with the blue-grey only kicking in
+    //! for hours where rain is forecast or has a non-zero chance; nothing is
+    //! drawn for an hour whose coverage is 0%. Data from RainService
+    //! (Open-Meteo).
     function drawCloudCover(dc) {
         if (!getBooleanProperty("ShowCloudCover", true)) {
             return;
         }
 
         var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
+        var rainMm = Application.Storage.getValue("rain_hourly");
+        var rainChance = Application.Storage.getValue("rain_chance");
+
+        // Many small adjacent fills make up each band; with anti-aliasing on,
+        // each one gets its own blended edge against the background, leaving
+        // a fine grid of seam lines between segments. Turn it off for these
+        // fills and restore it afterwards for the ring and hands.
+        dc.setAntiAlias(false);
 
         // Higher altitude band sits closer to the centre. Radii are spaced so
         // the thick bands overlap a little, stacking the gradients.
-        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, bg, rainMm, rainChance);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg, rainMm, rainChance);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg, rainMm, rainChance);
+
+        dc.setAntiAlias(true);
     }
 
     //! Draw one cloud band: a line at a fixed radius whose thickness tracks
     //! the hourly coverage (0-100) and whose colour runs from white at light
-    //! cover to grey to blue-grey at heavy cover. Hours with no cloud are
-    //! left blank, so the line only appears where there is cloud.
-    function drawCloudBand(dc, cover, baseRadius, bg) {
+    //! cover to grey to blue-grey at heavy cover. The blue-grey shift is
+    //! gated by `rainMm`/`rainChance` (mm forecast and probability 0-100 for
+    //! the same hours) — heavy cloud with no rain in the forecast stays grey
+    //! rather than reading as a storm. Hours with no cloud are left blank, so
+    //! the line only appears where there is cloud.
+    function drawCloudBand(dc, cover, baseRadius, bg, rainMm, rainChance) {
         if (cover == null || cover.size() < 2) {
             return;
         }
@@ -207,6 +222,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var hw = new [n];
         var cf = new [n];
+        var sf = new [n];  // storm fraction: how much rain/rain-chance backs this hour
         for (var i = 0; i < n; i++) {
             var c = cover[i];
             if (c == null || c < 0) {
@@ -216,6 +232,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             }
             cf[i] = c / 100.0;
             hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * cf[i];
+
+            var mm = (rainMm != null && i < rainMm.size()) ? rainMm[i] : null;
+            var mmFrac = (mm == null) ? 0.0 : mm / 1.0; // 1mm/hr is already "raining"
+            var chance = (rainChance != null && i < rainChance.size()) ? rainChance[i] : null;
+            var chanceFrac = (chance == null) ? 0.0 : chance / 100.0;
+            var storm = mmFrac > chanceFrac ? mmFrac : chanceFrac;
+            sf[i] = storm > 1.0 ? 1.0 : storm;
         }
 
         var sub = 2;
@@ -237,6 +260,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
                 var cfA = cf[i] + (cf[i + 1] - cf[i]) * t0;
                 var cfB = cf[i] + (cf[i + 1] - cf[i]) * t1;
+                var sfA = sf[i] + (sf[i + 1] - sf[i]) * t0;
+                var sfB = sf[i] + (sf[i + 1] - sf[i]) * t1;
 
                 // Ripple the colour along the band so it doesn't read as a
                 // flat tint: a gentle sine wave nudges the coverage fraction
@@ -251,7 +276,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 } else if (cf2 > 1.0) {
                     cf2 = 1.0;
                 }
-                var base = dimColor(cloudColor(cf2));
+                var base = dimColor(cloudColor(cf2, (sfA + sfB) / 2.0));
 
                 for (var k = 0; k < layers; k++) {
                     var g0 = k * 1.0 / layers;
@@ -278,13 +303,16 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     }
 
     //! Map a cloud band's coverage (0.0-1.0) to a colour: thin/wispy cloud is
-    //! near-white, fading through grey to a blue-grey "storm" tint as
-    //! coverage (and thus the drawn line's thickness) increases.
-    function cloudColor(coverFraction) {
+    //! near-white, fading through grey as coverage (and thus the drawn
+    //! line's thickness) increases. Past 50% coverage, `stormFraction`
+    //! (0.0-1.0, how much rain or rain chance backs this hour) gates a
+    //! further shift toward a blue-grey "storm" tint — heavy cloud with no
+    //! rain in the forecast stays grey rather than reading as a storm.
+    function cloudColor(coverFraction, stormFraction) {
         if (coverFraction <= 0.5) {
             return lerpColor(0xFFFFFF, 0xCCCCCC, coverFraction / 0.5);
         }
-        return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5);
+        return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5 * stormFraction);
     }
 
     //! Draw the hour, minute and (optionally) second hands
