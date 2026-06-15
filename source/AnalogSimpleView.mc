@@ -172,30 +172,31 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
-    //! Draw cloud cover as three concentric grey lines — low, mid and high
+    //! Draw cloud cover as three concentric lines — low, mid and high
     //! altitude — each at its own fixed radius, with higher cloud nearer the
     //! centre (the rim is the horizon). A line's thickness tracks that band's
-    //! hourly coverage with a soft grey gradient; nothing is drawn for an hour
-    //! whose coverage is 0%. Data from RainService (Open-Meteo).
+    //! hourly coverage, and its colour shifts from white (thin/wispy) through
+    //! grey to a blue-grey (thick/stormy); nothing is drawn for an hour whose
+    //! coverage is 0%. Data from RainService (Open-Meteo).
     function drawCloudCover(dc) {
         if (!getBooleanProperty("ShowCloudCover", true)) {
             return;
         }
 
-        var grey = dimColor(0xCCCCCC);
         var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
 
         // Higher altitude band sits closer to the centre. Radii are spaced so
-        // the thick bands overlap a little, stacking the grey gradients.
-        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, grey, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, grey, bg);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, grey, bg);
+        // the thick bands overlap a little, stacking the gradients.
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg);
     }
 
-    //! Draw one cloud band: a soft grey line at a fixed radius whose thickness
-    //! tracks the hourly coverage (0-100). Hours with no cloud are left blank,
-    //! so the line only appears where there is cloud.
-    function drawCloudBand(dc, cover, baseRadius, grey, bg) {
+    //! Draw one cloud band: a line at a fixed radius whose thickness tracks
+    //! the hourly coverage (0-100) and whose colour runs from white at light
+    //! cover to grey to blue-grey at heavy cover. Hours with no cloud are
+    //! left blank, so the line only appears where there is cloud.
+    function drawCloudBand(dc, cover, baseRadius, bg) {
         if (cover == null || cover.size() < 2) {
             return;
         }
@@ -205,6 +206,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var maxHalf = _radius * 0.065;   // exaggerated: 100% reads as heavy
 
         var hw = new [n];
+        var cf = new [n];
         for (var i = 0; i < n; i++) {
             var c = cover[i];
             if (c == null || c < 0) {
@@ -212,7 +214,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             } else if (c > 100) {
                 c = 100;
             }
-            hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
+            cf[i] = c / 100.0;
+            hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * cf[i];
         }
 
         var sub = 2;
@@ -232,11 +235,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var cosB = Math.cos(angB);
                 var hwA = hw[i] + (hw[i + 1] - hw[i]) * t0;
                 var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
+                var cfA = cf[i] + (cf[i + 1] - cf[i]) * t0;
+                var cfB = cf[i] + (cf[i + 1] - cf[i]) * t1;
+                var base = dimColor(cloudColor((cfA + cfB) / 2.0));
 
                 for (var k = 0; k < layers; k++) {
                     var g0 = k * 1.0 / layers;
                     var g1 = (k + 1) * 1.0 / layers;
-                    dc.setColor(bandColor(grey, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(bandColor(base, bg, k * 1.0 / (layers - 1)), Graphics.COLOR_TRANSPARENT);
 
                     // Outer half of the band.
                     dc.fillPolygon([
@@ -255,6 +261,16 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 }
             }
         }
+    }
+
+    //! Map a cloud band's coverage (0.0-1.0) to a colour: thin/wispy cloud is
+    //! near-white, fading through grey to a blue-grey "storm" tint as
+    //! coverage (and thus the drawn line's thickness) increases.
+    function cloudColor(coverFraction) {
+        if (coverFraction <= 0.5) {
+            return lerpColor(0xFFFFFF, 0xCCCCCC, coverFraction / 0.5);
+        }
+        return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5);
     }
 
     //! Draw the hour, minute and (optionally) second hands
