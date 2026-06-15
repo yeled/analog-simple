@@ -237,7 +237,21 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
                 var cfA = cf[i] + (cf[i + 1] - cf[i]) * t0;
                 var cfB = cf[i] + (cf[i + 1] - cf[i]) * t1;
-                var base = dimColor(cloudColor((cfA + cfB) / 2.0));
+
+                // Ripple the colour along the band so it doesn't read as a
+                // flat tint: a gentle sine wave nudges the coverage fraction
+                // up and down, shifting whiter/greyer/bluer in waves. Each
+                // band gets its own phase (from baseRadius) so the three
+                // rings don't ripple in lockstep.
+                var midAngle = (angA + angB) / 2.0;
+                var ripple = Math.sin(midAngle * 5.0 + baseRadius * 0.7) * 0.12;
+                var cf2 = (cfA + cfB) / 2.0 + ripple;
+                if (cf2 < 0.0) {
+                    cf2 = 0.0;
+                } else if (cf2 > 1.0) {
+                    cf2 = 1.0;
+                }
+                var base = dimColor(cloudColor(cf2));
 
                 for (var k = 0; k < layers; k++) {
                     var g0 = k * 1.0 / layers;
