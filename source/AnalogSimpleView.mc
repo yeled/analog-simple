@@ -248,7 +248,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = cover.size() < 13 ? cover.size() : 13;
         var minHalf = _radius * 0.004;
-        var maxHalf = _radius * 0.05;
+        var maxHalf = _radius * 0.07;
 
         var hw = new [n];
         for (var i = 0; i < n; i++) {
@@ -259,10 +259,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         // Dim grey keeps emitted light (and power) low in AOD.
         dc.setColor(dimColor(0x808080), Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(1);
+        dc.setPenWidth(2);
 
         var sub = 4;                 // sub-steps per hour, to round the facets
-        var hatchEvery = 2;          // a radial dash every Nth sub-step
+        var hatchEvery = 1;          // a radial dash every Nth sub-step
         var hatchMin = minHalf * 2;  // only hatch where the band has some width
         var step = 0;
         for (var i = 0; i < n - 1; i++) {
