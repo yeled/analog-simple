@@ -42,20 +42,27 @@ Connect IQ manifests have no app-version field (`iq:manifest version="3"` is
 the manifest *schema* version — never bump it). The app version lives in the
 `AppVersion` string in `resources/strings/strings.xml`.
 
-**Two Garmin app ids, two branches** (a published Connect IQ app can't move
-from beta to public — it needs a fresh app id):
-- **beta** — app id `b3a1e6c2-…`, on `main` and dev branches (e.g.
-  `claude/rain-gradient`). For ongoing development/testing. Tag betas
-  `v<version>-beta`.
-- **public** — app id `88c61d1d-…`, on the `public` branch. The global
-  release. Tag `v<version>` (plain). The two app ids' version numbers run
-  independently, so the same `vX.Y.Z` and `vX.Y.Z-beta` can coexist.
+**`main` is the release source** — "what we ship to public" lives on `main`,
+not on divergent branches. A published Connect IQ app can't move from beta to
+public, so there are still two Garmin app ids, but the *only* thing that
+differs between a beta build and the public build is `manifest.xml` (the app
+id and the device list). Stamp it per target with `scripts/set-manifest.sh`
+instead of hand-editing or merging it:
+- `scripts/set-manifest.sh beta` — app id `b3a1e6c2-…`, the two Venu 4 sizes
+  only (fast dev/testing). Tag betas `v<version>-beta`.
+- `scripts/set-manifest.sh public` — app id `88c61d1d-…`, the full store
+  device list (the global release). Tag `v<version>` (plain).
 
-When asked to build the `.iq`: bump `AppVersion`, commit the bump, build the
-`.iq` **named with that version** (`bin/analog-simple-<version>.iq`, e.g.
-`bin/analog-simple-1.0.10-beta12.iq`), and report the version. Tag per the
-branch's scheme above. Docs-only changes (README, screenshots, CLAUDE.md) get
-no version bump and no `.iq`.
+The two app ids' version numbers run independently, so `vX.Y.Z` and
+`vX.Y.Z-beta` can coexist. (`public` is kept in sync with `main`, but `main`
+is the source of truth.)
+
+When asked to build the `.iq`: bump `AppVersion`, commit the bump, run the
+right `set-manifest.sh` for the target, build the `.iq` **named with that
+version** (`bin/analog-simple-<version>.iq`, e.g.
+`bin/analog-simple-1.1.0.iq`), and report the version. Tag per the target's
+scheme above. Docs-only changes (README, screenshots, CLAUDE.md) get no
+version bump and no `.iq`.
 
 **Pushing is OK** (re-enabled 2026-06-15) — Claude may `git push` branches and
 tags as part of completing work. Still treat large branch-topology moves
