@@ -71,7 +71,9 @@ no version bump and no `.iq`.
 - Screenshots: `screencapture` needs Screen Recording permission (without it
   you silently get wallpaper-only images). Use the simulator's own
   **File → Save Screen Capture** instead — it saves just the device screen
-  and can be driven via System Events UI scripting.
+  and can be driven via System Events UI scripting. Save them into `bin/`
+  named with the version (e.g. `bin/analog-simple-1.0.10-beta12.png`); `bin/`
+  is gitignored so they're never committed.
 - If `monkeydo` says "Unable to connect to simulator", the sim is wedged:
   `pkill -f "ConnectIQ.app/Contents/MacOS/simulator"` and relaunch.
 
