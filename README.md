@@ -32,7 +32,9 @@ the Rounded Lume and Diamond hand styles.*
   for dry hours.
 - An optional **cloud cover** display: three grey gradient lines (low, mid,
   high altitude) floating inward from the bezel — higher cloud sits closer
-  to the centre, and each line thickens with that layer's coverage.
+  to the centre, and each line thickens with that layer's coverage. The line
+  colour runs from white (thin/wispy) through grey, shifting toward a
+  blue-grey storm tint only for hours where rain is forecast or likely.
 - Both forecasts are fetched in the background from
   [Open-Meteo](https://open-meteo.com/) (ECMWF model) and need the watch's
   location (or a manual lat/long override) plus a phone connection to
@@ -45,6 +47,11 @@ the Rounded Lume and Diamond hand styles.*
   that switches to a red-green-safe red/amber/blue scale.
 - A color brightness setting (100/80/60/40%) that mutes every drawn color —
   dimmer pixels also draw less power on the AMOLED display.
+- Power-conscious rendering: the static layer (ticks, weather bands, battery
+  ring) is drawn into an offscreen buffer and only rebuilt when it actually
+  changes, so each tick of the second hand just redraws the hands. In
+  always-on / low-power mode the second hand hides and the weather bands draw
+  thinner to stay within the display's always-on power budget.
 
 ## Project layout
 
@@ -71,6 +78,7 @@ app after installing the watch face:
 | Tick Mark Color | Color of the bezel hour ticks |
 | Rain Forecast | Show the next 12 hours of rain amount as a blue gradient band around the bezel (Open-Meteo) |
 | Cloud Cover | Show low/mid/high cloud cover as three grey gradient lines (Open-Meteo) |
+| Cloud Color Ripple | Vary each cloud line's colour in waves along the ring instead of a flat tint (turn off if it trips Always-On Display) |
 | Location Override | Force the weather location to a "latitude,longitude" pair instead of GPS |
 | Date Color | Color of the day number |
 | Battery Ring Source | Body Battery or Watch Battery |
