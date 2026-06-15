@@ -222,19 +222,26 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     }
 
     //! Low-power weather for always-on mode. The three real cloud bands are
-    //! drawn as solid fills like the awake face, but in a single dim grey:
-    //! the low brightness (not a smaller lit area) is what keeps the
-    //! always-on power budget in check. Rain is a thin stroke along the
-    //! band's inner edge for rainy hours.
+    //! drawn as solid fills like the awake face, but in a dim grey that gets
+    //! darker the more overcast it is: low brightness (not a smaller lit
+    //! area) is what keeps the always-on power budget in check, and dimming
+    //! with coverage stops it peaking when the sky is fully clouded. Rain is
+    //! a thin stroke along the band's inner edge for rainy hours.
     private function drawWeatherAod(dc) {
         if (_showCloud) {
+            // Darken the grey as overall cloudiness rises. The band area grows
+            // with coverage (thicker = cloudier), so dropping the brightness
+            // as the sky fills keeps total emitted light — and AOD power —
+            // from peaking exactly when it's fully overcast.
+            var grey = dimColor(lerpColor(0x4A4A4A, 0x141414, overcastFraction()));
+
             // Solid contiguous fills; turn AA off so the sub-step quads don't
             // leave seam lines between them.
             var hadAA = (dc has :setAntiAlias);
             if (hadAA) { dc.setAntiAlias(false); }
-            drawCloudBandAod(dc, Application.Storage.getValue("cloud_low"),  _radius * 0.78);
-            drawCloudBandAod(dc, Application.Storage.getValue("cloud_mid"),  _radius * 0.64);
-            drawCloudBandAod(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_low"),  _radius * 0.78, grey);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_mid"),  _radius * 0.64, grey);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, grey);
             if (hadAA) { dc.setAntiAlias(true); }
         }
         if (_showRain) {
@@ -242,10 +249,31 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
-    //! One cloud band in low-power mode: a solid dim-grey fill from the inner
-    //! to the outer edge, subdivided per hour to round the facets. Hours with
-    //! no cloud are skipped.
-    private function drawCloudBandAod(dc, cover, baseRadius) {
+    //! Mean cloud coverage across all three layers and hours, as 0.0-1.0.
+    //! Drives how dark the always-on cloud fill is drawn.
+    private function overcastFraction() {
+        var total = 0.0;
+        var count = 0;
+        var keys = ["cloud_low", "cloud_mid", "cloud_high"];
+        for (var k = 0; k < keys.size(); k++) {
+            var arr = Application.Storage.getValue(keys[k]);
+            if (arr == null) { continue; }
+            var n = arr.size() < 13 ? arr.size() : 13;
+            for (var i = 0; i < n; i++) {
+                var v = arr[i];
+                if (v == null) { continue; }
+                if (v < 0) { v = 0; } else if (v > 100) { v = 100; }
+                total += v;
+                count++;
+            }
+        }
+        return (count > 0) ? (total / count) / 100.0 : 0.0;
+    }
+
+    //! One cloud band in low-power mode: a solid fill (colour `fillColor`)
+    //! from the inner to the outer edge, subdivided per hour to round the
+    //! facets. Hours with no cloud are skipped.
+    private function drawCloudBandAod(dc, cover, baseRadius, fillColor) {
         if (cover == null || cover.size() < 2) {
             return;
         }
@@ -261,8 +289,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
         }
 
-        // A single dim grey; dim pixels draw little power on AMOLED.
-        dc.setColor(dimColor(0x303030), Graphics.COLOR_TRANSPARENT);
+        dc.setColor(fillColor, Graphics.COLOR_TRANSPARENT);
 
         var sub = 4;   // sub-steps per hour, to round the facets
         for (var i = 0; i < n - 1; i++) {
