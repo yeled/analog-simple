@@ -57,8 +57,10 @@ When asked to build the `.iq`: bump `AppVersion`, commit the bump, build the
 branch's scheme above. Docs-only changes (README, screenshots, CLAUDE.md) get
 no version bump and no `.iq`.
 
-**Do not `git push`** — the user pushes and manages merges/branch topology
-(beta → `public`) themselves. Commit and tag locally; leave pushing to them.
+**Pushing is OK** (re-enabled 2026-06-15) — Claude may `git push` branches and
+tags as part of completing work. Still treat large branch-topology moves
+(merging beta → `public` for a global release) and store uploads as deliberate
+steps: do them when asked and report clearly.
 
 ## Simulator gotchas (learned the hard way)
 
