@@ -188,6 +188,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var bg = getColorProperty("BackgroundColor", Graphics.COLOR_BLACK);
         var rainMm = Application.Storage.getValue("rain_hourly");
         var rainChance = Application.Storage.getValue("rain_chance");
+        var ripple = getBooleanProperty("CloudCoverRipple", true);
 
         // Many small adjacent fills make up each band; with anti-aliasing on,
         // each one gets its own blended edge against the background, leaving
@@ -197,9 +198,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         // Higher altitude band sits closer to the centre. Radii are spaced so
         // the thick bands overlap a little, stacking the gradients.
-        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, bg, rainMm, rainChance);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg, rainMm, rainChance);
-        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg, rainMm, rainChance);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, bg, rainMm, rainChance, ripple);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg, rainMm, rainChance, ripple);
+        drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg, rainMm, rainChance, ripple);
 
         dc.setAntiAlias(true);
     }
@@ -210,8 +211,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! gated by `rainMm`/`rainChance` (mm forecast and probability 0-100 for
     //! the same hours) — heavy cloud with no rain in the forecast stays grey
     //! rather than reading as a storm. Hours with no cloud are left blank, so
-    //! the line only appears where there is cloud.
-    function drawCloudBand(dc, cover, baseRadius, bg, rainMm, rainChance) {
+    //! the line only appears where there is cloud. When `ripple` is false the
+    //! colour is a flat tint per segment instead of waving along the ring.
+    function drawCloudBand(dc, cover, baseRadius, bg, rainMm, rainChance, ripple) {
         if (cover == null || cover.size() < 2) {
             return;
         }
@@ -267,10 +269,15 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 // flat tint: a gentle sine wave nudges the coverage fraction
                 // up and down, shifting whiter/greyer/bluer in waves. Each
                 // band gets its own phase (from baseRadius) so the three
-                // rings don't ripple in lockstep.
-                var midAngle = (angA + angB) / 2.0;
-                var ripple = Math.sin(midAngle * 5.0 + baseRadius * 0.7) * 0.12;
-                var cf2 = (cfA + cfB) / 2.0 + ripple;
+                // rings don't ripple in lockstep. Optional: the extra sine
+                // call and per-segment colour changes add draw work that can
+                // trip a device's Always-On Display power budget.
+                var rippleAmt = 0.0;
+                if (ripple) {
+                    var midAngle = (angA + angB) / 2.0;
+                    rippleAmt = Math.sin(midAngle * 5.0 + baseRadius * 0.7) * 0.12;
+                }
+                var cf2 = (cfA + cfB) / 2.0 + rippleAmt;
                 if (cf2 < 0.0) {
                     cf2 = 0.0;
                 } else if (cf2 > 1.0) {

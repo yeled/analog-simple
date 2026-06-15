@@ -49,6 +49,10 @@
         <settingConfig type="boolean" />
     </setting>
 
+    <setting propertyKey="@Properties.CloudCoverRipple" title="@Strings.CloudCoverRippleTitle" prompt="@Strings.CloudCoverRipplePrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
     <setting propertyKey="@Properties.LocationOverride" title="@Strings.LocationOverrideTitle" prompt="@Strings.LocationOverridePrompt">
         <settingConfig type="alphaNumeric" />
     </setting>
