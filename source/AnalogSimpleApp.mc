@@ -6,6 +6,9 @@ import Toybox.WatchUi;
 
 class AnalogSimpleApp extends Application.AppBase {
 
+    // Kept so settings changes can refresh the view's cached settings.
+    private var _view = null;
+
     function initialize() {
         AppBase.initialize();
     }
@@ -25,13 +28,17 @@ class AnalogSimpleApp extends Application.AppBase {
     // Return the initial view of the watch face
     (:background_excluded)
     function getInitialView() {
-        return [ new AnalogSimpleView() ];
+        _view = new AnalogSimpleView();
+        return [ _view ];
     }
 
     // New app settings have been received so trigger a UI update
     function onSettingsChanged() {
         var locationChanged = invalidateCacheIfLocationChanged();
         registerRainFetch(locationChanged);
+        if (_view != null) {
+            _view.onSettingsUpdate();
+        }
         WatchUi.requestUpdate();
     }
 

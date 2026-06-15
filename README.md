@@ -11,19 +11,34 @@ the Connect IQ SDK.
 level. Shown with the default Sword hands (parallel blades with a
 transparent lume channel) at 60% color brightness.*
 
+| Clear | Light rain | Heavy rain + cloud | Cloudy |
+| --- | --- | --- | --- |
+| ![Clear](screenshots/forecast-clear.png) | ![Light rain](screenshots/forecast-light-rain.png) | ![Heavy rain and cloud](screenshots/forecast-heavy-rain-cloud.png) | ![Cloudy](screenshots/forecast-cloudy.png) |
+
+*The blue band hugs the bezel and deepens with rain; the grey lines float
+inward from the bezel and thicken with low/mid/high cloud cover. Shown with
+the Rounded Lume and Diamond hand styles.*
+
 ## Features
 
-- Analog hour/minute/second hands with independently configurable colors
-  and a choice of three hand styles: Classic, Sword (with a transparent
-  lume inset), and Diamond.
+- Analog hour/minute/second hands with a choice of four hand styles:
+  Classic, Sword (with a transparent lume inset), Diamond, and Rounded Lume
+  (the default — a capsule shape with a hollow lume channel).
 - Adjustable hand length (80-110%).
 - 12 hour tick marks around the bezel (configurable color).
-- An optional 12-hour **rain-amount forecast** drawn as a solid blue band
-  around the bezel (12 o'clock = soonest hour, clockwise); the band's inner edge
-  pulls inward with that hour's precipitation in mm — a thin ring when dry,
-  a deep bulge for heavy rain. Data is fetched in the background from
-  [Open-Meteo](https://open-meteo.com/) (ECMWF model) and needs the watch's
-  location plus a phone connection to refresh.
+- An optional 12-hour **rain-amount forecast** drawn as a blue gradient band
+  around the bezel (12 o'clock = soonest hour, clockwise); the band hugs the
+  rim and deepens with that hour's precipitation in mm — nothing is drawn
+  for dry hours.
+- An optional **cloud cover** display: three grey gradient lines (low, mid,
+  high altitude) floating inward from the bezel — higher cloud sits closer
+  to the centre, and each line thickens with that layer's coverage. The line
+  colour runs from white (thin/wispy) through grey, shifting toward a
+  blue-grey storm tint only for hours where rain is forecast or likely.
+- Both forecasts are fetched in the background from
+  [Open-Meteo](https://open-meteo.com/) (ECMWF model) and need the watch's
+  location (or a manual lat/long override) plus a phone connection to
+  refresh.
 - A dark grey date box at the 3 o'clock position showing the day of month.
 - A rounded-square progress ring around the date box that shows either your
   current **Body Battery** level or your **Watch Battery** level remaining
@@ -32,6 +47,11 @@ transparent lume channel) at 60% color brightness.*
   that switches to a red-green-safe red/amber/blue scale.
 - A color brightness setting (100/80/60/40%) that mutes every drawn color —
   dimmer pixels also draw less power on the AMOLED display.
+- Power-conscious rendering: the static layer (ticks, weather bands, battery
+  ring) is drawn into an offscreen buffer and only rebuilt when it actually
+  changes, so each tick of the second hand just redraws the hands. In
+  always-on / low-power mode the second hand hides and the weather bands draw
+  thinner to stay within the display's always-on power budget.
 
 ## Project layout
 
@@ -51,14 +71,15 @@ app after installing the watch face:
 
 | Setting | Description |
 | --- | --- |
-| Hand Style | Classic, Sword, or Diamond hand shapes |
+| Hand Style | Rounded Lume (default), Classic, Sword, or Diamond hand shapes |
 | Hand Length | Short (80%) to Long (110%) |
-| Hour Hand Color / Minute Hand Color | Color of each hand |
-| Show Second Hand / Second Hand Color | Toggle and color the second hand |
+| Show Second Hand | Toggle the second hand |
 | Color Brightness | Mute all colors to 80/60/40% for a softer, lower-power face |
-| Background Color | Watch face background |
 | Tick Mark Color | Color of the bezel hour ticks |
-| Rain Forecast Ticks | Show the next 12 hours of rain amount as a blue bezel band (Open-Meteo) |
+| Rain Forecast | Show the next 12 hours of rain amount as a blue gradient band around the bezel (Open-Meteo) |
+| Cloud Cover | Show low/mid/high cloud cover as three grey gradient lines (Open-Meteo) |
+| Cloud Color Ripple | Vary each cloud line's colour in waves along the ring instead of a flat tint (turn off if it trips Always-On Display) |
+| Location Override | Force the weather location to a "latitude,longitude" pair instead of GPS |
 | Date Color | Color of the day number |
 | Battery Ring Source | Body Battery or Watch Battery |
 | Color Ring By Level | Auto-color the ring green/yellow/red by level |

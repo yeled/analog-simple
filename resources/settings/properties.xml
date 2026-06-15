@@ -1,7 +1,7 @@
 <properties>
 
     <!-- Hands -->
-    <property id="HandStyle" type="number">0</property>
+    <property id="HandStyle" type="number">3</property>
     <property id="HandLength" type="number">100</property>
     <property id="HourHandColor" type="number">0xFFFFFF</property>
     <property id="MinuteHandColor" type="number">0xFFFFFF</property>
@@ -15,6 +15,8 @@
     <property id="DateColor" type="number">0xFFFFFF</property>
     <property id="ShowRainForecast" type="boolean">true</property>
     <property id="ShowCloudCover" type="boolean">true</property>
+    <property id="CloudCoverRipple" type="boolean">true</property>
+    <property id="ShowWeatherInAOD" type="boolean">false</property>
     <property id="LocationOverride" type="string"></property>
 
     <!-- Battery ring at the 3 o'clock position -->
