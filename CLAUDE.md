@@ -24,9 +24,10 @@ KEY=/Users/yeled/Downloads/developer_key
 java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
   -o bin/analog-simple.prg -f monkey.jungle -y "$KEY" -d venu445mm
 
-# Store package (.iq, builds every device in the manifest)
+# Store package (.iq, builds every device in the manifest). Name the output
+# with the AppVersion in it, e.g. bin/analog-simple-1.0.10-beta12.iq
 java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
-  -o bin/analog-simple.iq -f monkey.jungle -y "$KEY" -e
+  -o bin/analog-simple-<version>.iq -f monkey.jungle -y "$KEY" -e
 
 # Simulator: launch once, then (re)load the face onto it
 "$SDK/bin/connectiq"
@@ -51,8 +52,10 @@ from beta to public — it needs a fresh app id):
   independently, so the same `vX.Y.Z` and `vX.Y.Z-beta` can coexist.
 
 When asked to build the `.iq`: bump `AppVersion`, commit the bump, build the
-`.iq`, and report the version. Tag per the branch's scheme above. Docs-only
-changes (README, screenshots, CLAUDE.md) get no version bump and no `.iq`.
+`.iq` **named with that version** (`bin/analog-simple-<version>.iq`, e.g.
+`bin/analog-simple-1.0.10-beta12.iq`), and report the version. Tag per the
+branch's scheme above. Docs-only changes (README, screenshots, CLAUDE.md) get
+no version bump and no `.iq`.
 
 **Do not `git push`** — the user pushes and manages merges/branch topology
 (beta → `public`) themselves. Commit and tag locally; leave pushing to them.
