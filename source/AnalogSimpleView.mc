@@ -293,9 +293,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         // Fill pass: AA off so the contiguous sub-step quads don't seam.
         if (aa) { dc.setAntiAlias(false); }
-        // When the ripple is on, the fill grey undulates lighter/darker along
-        // the band (a sine wave, its own phase per band) instead of a flat
-        // tint; otherwise it's a single grey set once.
+        // When the ripple is on, the fill grey undulates along the band (a
+        // sine wave, its own phase per band) from solid down to black — which
+        // reads as transparent on the black AOD background — so the cloud
+        // fades in and out; otherwise it's a single grey set once.
         if (!_cloudRipple) {
             dc.setColor(fillColor, Graphics.COLOR_TRANSPARENT);
         }
@@ -317,7 +318,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
                 if (_cloudRipple) {
                     var mid = (a0 + a1) / 2.0;
-                    var f = 1.0 + Math.sin(mid * 5.0 + baseRadius * 0.7) * 0.45;
+                    // 0.0 at the trough (black / "transparent") up to 1.4x
+                    // (solid, slightly boosted) at the peak.
+                    var f = 0.7 + 0.7 * Math.sin(mid * 5.0 + baseRadius * 0.7);
                     dc.setColor(scaleColor(fillColor, f), Graphics.COLOR_TRANSPARENT);
                 }
 
