@@ -234,15 +234,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             // as the sky fills keeps total emitted light — and AOD power —
             // from peaking exactly when it's fully overcast.
             var grey = dimColor(lerpColor(0x4A4A4A, 0x141414, overcastFraction()));
+            // Outline a quarter of the way toward white so the band edge stays
+            // visible even when the fill is nearly black.
+            var edge = lerpColor(grey, 0xFFFFFF, 0.25);
 
-            // Solid contiguous fills; turn AA off so the sub-step quads don't
-            // leave seam lines between them.
-            var hadAA = (dc has :setAntiAlias);
-            if (hadAA) { dc.setAntiAlias(false); }
-            drawCloudBandAod(dc, Application.Storage.getValue("cloud_low"),  _radius * 0.78, grey);
-            drawCloudBandAod(dc, Application.Storage.getValue("cloud_mid"),  _radius * 0.64, grey);
-            drawCloudBandAod(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, grey);
-            if (hadAA) { dc.setAntiAlias(true); }
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_low"),  _radius * 0.78, grey, edge);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_mid"),  _radius * 0.64, grey, edge);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, grey, edge);
         }
         if (_showRain) {
             drawRainAodOutline(dc);
@@ -270,10 +268,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return (count > 0) ? (total / count) / 100.0 : 0.0;
     }
 
-    //! One cloud band in low-power mode: a solid fill (colour `fillColor`)
-    //! from the inner to the outer edge, subdivided per hour to round the
-    //! facets. Hours with no cloud are skipped.
-    private function drawCloudBandAod(dc, cover, baseRadius, fillColor) {
+    //! One cloud band in low-power mode: a solid `fillColor` fill from the
+    //! inner to the outer edge, with a lighter `outlineColor` stroke around
+    //! both edges so the band stays visible when the fill is nearly black.
+    //! Subdivided per hour to round the facets; cloud-free hours are skipped.
+    private function drawCloudBandAod(dc, cover, baseRadius, fillColor, outlineColor) {
         if (cover == null || cover.size() < 2) {
             return;
         }
@@ -289,9 +288,17 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
         }
 
-        dc.setColor(fillColor, Graphics.COLOR_TRANSPARENT);
-
         var sub = 4;   // sub-steps per hour, to round the facets
+        var aa = (dc has :setAntiAlias);
+
+        // Fill pass: AA off so the contiguous sub-step quads don't seam.
+        if (aa) { dc.setAntiAlias(false); }
+        // When the ripple is on, the fill grey undulates lighter/darker along
+        // the band (a sine wave, its own phase per band) instead of a flat
+        // tint; otherwise it's a single grey set once.
+        if (!_cloudRipple) {
+            dc.setColor(fillColor, Graphics.COLOR_TRANSPARENT);
+        }
         for (var i = 0; i < n - 1; i++) {
             if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
                 continue;  // gap where there's no cloud
@@ -308,12 +315,45 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
                 var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
 
+                if (_cloudRipple) {
+                    var mid = (a0 + a1) / 2.0;
+                    var f = 1.0 + Math.sin(mid * 5.0 + baseRadius * 0.7) * 0.45;
+                    dc.setColor(scaleColor(fillColor, f), Graphics.COLOR_TRANSPARENT);
+                }
+
                 dc.fillPolygon([
                     [_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0],
                     [_centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1],
                     [_centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1],
                     [_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0]
                 ]);
+            }
+        }
+
+        // Outline pass: AA on for smooth edges, in the lighter colour.
+        if (aa) { dc.setAntiAlias(true); }
+        dc.setColor(outlineColor, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        for (var i = 0; i < n - 1; i++) {
+            if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
+                continue;
+            }
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var a0 = (i + t0) * Math.PI / 6.0;
+                var a1 = (i + t1) * Math.PI / 6.0;
+                var s0 = Math.sin(a0);
+                var c0 = Math.cos(a0);
+                var s1 = Math.sin(a1);
+                var c1 = Math.cos(a1);
+                var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
+
+                dc.drawLine(_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0,
+                            _centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1);
+                dc.drawLine(_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0,
+                            _centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1);
             }
         }
     }
@@ -1001,6 +1041,18 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var r = ((color >> 16) & 0xFF) * pct / 100;
         var g = ((color >> 8) & 0xFF) * pct / 100;
         var b = (color & 0xFF) * pct / 100;
+        return (r << 16) + (g << 8) + b;
+    }
+
+    //! Multiply each channel of a 24-bit RGB colour by `f`, clamped to 0-255.
+    //! Used to undulate the AOD cloud fill lighter/darker.
+    function scaleColor(color, f) {
+        var r = (((color >> 16) & 0xFF) * f).toNumber();
+        var g = (((color >> 8) & 0xFF) * f).toNumber();
+        var b = ((color & 0xFF) * f).toNumber();
+        if (r > 255) { r = 255; } else if (r < 0) { r = 0; }
+        if (g > 255) { g = 255; } else if (g < 0) { g = 0; }
+        if (b > 255) { b = 255; } else if (b < 0) { b = 0; }
         return (r << 16) + (g << 8) + b;
     }
 
