@@ -201,17 +201,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.clear();
 
         drawTicks(dc);
-        // The weather bands are the heaviest thing drawn (big lit area, ~400
-        // polygons) and blow the always-on power budget, so draw them only
-        // while awake. In low-power / AOD mode the face is just ticks, the
-        // battery ring and the hands.
-        if (_isAwake) {
-            if (_showRain) {
-                drawRainForecast(dc);
-            }
-            if (_showCloud) {
-                drawCloudCover(dc);
-            }
+        // TEST: bands drawn in AOD too, to isolate whether disabling
+        // anti-aliasing (not the bands themselves) was tripping the AOD
+        // power budget. See drawCloudCover — AA is left ON here.
+        if (_showRain) {
+            drawRainForecast(dc);
+        }
+        if (_showCloud) {
+            drawCloudCover(dc);
         }
         drawBatteryRing(dc);
     }
@@ -342,24 +339,15 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var rainChance = Application.Storage.getValue("rain_chance");
         var ripple = _cloudRipple;
 
-        // Many small adjacent fills make up each band; with anti-aliasing on,
-        // each one gets its own blended edge against the background, leaving
-        // a fine grid of seam lines between segments. Turn it off for these
-        // fills and restore it afterwards for the ring and hands.
-        var hadAA = (dc has :setAntiAlias);
-        if (hadAA) {
-            dc.setAntiAlias(false);
-        }
+        // TEST: anti-aliasing left ON for the cloud bands (the seam lines will
+        // return). This is the single variable we're isolating — the version
+        // that tripped AOD drew these with setAntiAlias(false).
 
         // Higher altitude band sits closer to the centre. Radii are spaced so
         // the thick bands overlap a little, stacking the gradients.
         drawCloudBand(dc, Application.Storage.getValue("cloud_low"), _radius * 0.78, bg, rainMm, rainChance, ripple);
         drawCloudBand(dc, Application.Storage.getValue("cloud_mid"), _radius * 0.64, bg, rainMm, rainChance, ripple);
         drawCloudBand(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50, bg, rainMm, rainChance, ripple);
-
-        if (hadAA) {
-            dc.setAntiAlias(true);
-        }
     }
 
     //! Draw one cloud band: a line at a fixed radius whose thickness tracks
