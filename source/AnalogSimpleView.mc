@@ -47,6 +47,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _showRain = true;
     private var _showCloud = true;
     private var _cloudRipple = true;
+    private var _weatherInAOD = false;
     private var _ringSource = RING_SOURCE_BODY_BATTERY;
     private var _ringByLevel = true;
     private var _ringColor = 0x00FFFF;
@@ -116,6 +117,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         _showRain       = getBooleanProperty("ShowRainForecast", true);
         _showCloud      = getBooleanProperty("ShowCloudCover", true);
         _cloudRipple    = getBooleanProperty("CloudCoverRipple", true);
+        _weatherInAOD   = getBooleanProperty("ShowWeatherInAOD", false);
         _ringSource     = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
         _ringByLevel    = getBooleanProperty("RingColorByLevel", true);
         _ringColor      = dimColor(getRawColor("RingColor", Graphics.COLOR_BLUE));
@@ -201,10 +203,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.clear();
 
         drawTicks(dc);
-        // The weather bands are the heaviest thing drawn (big lit area, ~400
-        // polygons) and blow the always-on power budget, so draw them only
-        // while awake. In low-power / AOD mode the face is just ticks, the
-        // battery ring and the hands.
+        // The full weather bands are the heaviest thing drawn (big lit area,
+        // ~400 polygons) and blow the always-on power budget, so draw them
+        // only while awake. In low-power / AOD mode draw nothing (default) or,
+        // if the user opted in, a lightweight outline version that stays
+        // within the budget.
         if (_isAwake) {
             if (_showRain) {
                 drawRainForecast(dc);
@@ -212,8 +215,122 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             if (_showCloud) {
                 drawCloudCover(dc);
             }
+        } else if (_weatherInAOD) {
+            drawWeatherAod(dc);
         }
         drawBatteryRing(dc);
+    }
+
+    //! Low-power weather for always-on mode. Instead of the filled bands
+    //! (whose lit area grows with coverage — worst exactly when overcast),
+    //! draw outlines whose lit cost barely changes with coverage:
+    //!  - cloud: a single ring (the three altitude layers collapsed to their
+    //!    per-hour maximum), stroked as a hollow outline whose gap widens with
+    //!    coverage, so "more cloud" costs almost no extra pixels;
+    //!  - rain: a thin stroke along the band's inner edge for rainy hours.
+    //! Both reuse the 12 precomputed hour angles, so there's no trig here.
+    private function drawWeatherAod(dc) {
+        if (_showCloud) {
+            drawCloudAodOutline(dc);
+        }
+        if (_showRain) {
+            drawRainAodOutline(dc);
+        }
+    }
+
+    //! Single collapsed cloud ring, drawn as inner+outer edge strokes.
+    private function drawCloudAodOutline(dc) {
+        var low = Application.Storage.getValue("cloud_low");
+        var mid = Application.Storage.getValue("cloud_mid");
+        var high = Application.Storage.getValue("cloud_high");
+        if (low == null || low.size() < 2) {
+            return;
+        }
+
+        var n = low.size() < 13 ? low.size() : 13;
+        var baseRadius = _radius * 0.70;
+        var minHalf = _radius * 0.004;
+        var maxHalf = _radius * 0.045;   // thinner than the awake bands
+
+        // Per-hour half-width from the max coverage across the three layers.
+        var hw = new [n];
+        for (var i = 0; i < n; i++) {
+            var c = maxCover(low, mid, high, i);
+            hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
+        }
+
+        // Dim grey keeps emitted light (and power) low in AOD.
+        dc.setColor(dimColor(0x707070), Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        for (var i = 0; i < n - 1; i++) {
+            if (hw[i] <= 0.0 || hw[i + 1] <= 0.0) {
+                continue;  // gap where either hour is cloud-free
+            }
+            var sinA = _tickSin[i % 12];
+            var cosA = _tickCos[i % 12];
+            var sinB = _tickSin[(i + 1) % 12];
+            var cosB = _tickCos[(i + 1) % 12];
+
+            // Outer edge.
+            dc.drawLine(_centerX + (baseRadius + hw[i]) * sinA, _centerY - (baseRadius + hw[i]) * cosA,
+                        _centerX + (baseRadius + hw[i + 1]) * sinB, _centerY - (baseRadius + hw[i + 1]) * cosB);
+            // Inner edge.
+            dc.drawLine(_centerX + (baseRadius - hw[i]) * sinA, _centerY - (baseRadius - hw[i]) * cosA,
+                        _centerX + (baseRadius - hw[i + 1]) * sinB, _centerY - (baseRadius - hw[i + 1]) * cosB);
+        }
+    }
+
+    //! Thin stroke along the rain band's inner edge for rainy hours.
+    private function drawRainAodOutline(dc) {
+        var hourly = Application.Storage.getValue("rain_hourly");
+        if (hourly == null || hourly.size() < 2) {
+            return;
+        }
+
+        var n = hourly.size() < 13 ? hourly.size() : 13;
+        var maxMm = 4.0;
+        var outerRadius = _radius * 0.97;
+        var maxDepth = _radius * 0.18;   // shallower than the awake band
+
+        var inner = new [n];
+        for (var i = 0; i < n; i++) {
+            var mm = hourly[i];
+            var frac = (mm == null) ? 0.0 : mm / maxMm;
+            if (frac > 1.0) { frac = 1.0; } else if (frac < 0.0) { frac = 0.0; }
+            inner[i] = (frac <= 0.0) ? outerRadius : outerRadius - frac * maxDepth;
+        }
+
+        dc.setColor(dimColor(0x2E5A87), Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        for (var i = 0; i < n - 1; i++) {
+            if (inner[i] >= outerRadius && inner[i + 1] >= outerRadius) {
+                continue;  // no rain across this segment
+            }
+            var sinA = _tickSin[i % 12];
+            var cosA = _tickCos[i % 12];
+            var sinB = _tickSin[(i + 1) % 12];
+            var cosB = _tickCos[(i + 1) % 12];
+            dc.drawLine(_centerX + inner[i] * sinA, _centerY - inner[i] * cosA,
+                        _centerX + inner[i + 1] * sinB, _centerY - inner[i + 1] * cosB);
+        }
+    }
+
+    //! Max cloud coverage (0-100) across the three layers at hour i.
+    private function maxCover(low, mid, high, i) {
+        var c = 0;
+        c = coverAt(low, i, c);
+        c = coverAt(mid, i, c);
+        c = coverAt(high, i, c);
+        return c;
+    }
+
+    private function coverAt(arr, i, soFar) {
+        if (arr == null || i >= arr.size() || arr[i] == null) {
+            return soFar;
+        }
+        var v = arr[i];
+        if (v < 0) { v = 0; } else if (v > 100) { v = 100; }
+        return v > soFar ? v : soFar;
     }
 
     function onHide() {

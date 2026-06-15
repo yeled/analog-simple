@@ -53,6 +53,10 @@
         <settingConfig type="boolean" />
     </setting>
 
+    <setting propertyKey="@Properties.ShowWeatherInAOD" title="@Strings.ShowWeatherInAODTitle" prompt="@Strings.ShowWeatherInAODPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
     <setting propertyKey="@Properties.LocationOverride" title="@Strings.LocationOverrideTitle" prompt="@Strings.LocationOverridePrompt">
         <settingConfig type="alphaNumeric" />
     </setting>

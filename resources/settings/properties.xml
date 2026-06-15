@@ -16,6 +16,7 @@
     <property id="ShowRainForecast" type="boolean">true</property>
     <property id="ShowCloudCover" type="boolean">true</property>
     <property id="CloudCoverRipple" type="boolean">true</property>
+    <property id="ShowWeatherInAOD" type="boolean">false</property>
     <property id="LocationOverride" type="string"></property>
 
     <!-- Battery ring at the 3 o'clock position -->
