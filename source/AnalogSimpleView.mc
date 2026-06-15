@@ -201,11 +201,17 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.clear();
 
         drawTicks(dc);
-        if (_showRain) {
-            drawRainForecast(dc);
-        }
-        if (_showCloud) {
-            drawCloudCover(dc);
+        // The weather bands are the heaviest thing drawn (big lit area, ~400
+        // polygons) and blow the always-on power budget, so draw them only
+        // while awake. In low-power / AOD mode the face is just ticks, the
+        // battery ring and the hands.
+        if (_isAwake) {
+            if (_showRain) {
+                drawRainForecast(dc);
+            }
+            if (_showCloud) {
+                drawCloudCover(dc);
+            }
         }
         drawBatteryRing(dc);
     }
@@ -262,8 +268,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var n = hourly.size() < 13 ? hourly.size() : 13;
         var maxMm = 4.0;                  // mm/hr that maps to the deepest band
         var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
-        // Shallower band in low-power mode lights fewer pixels for AOD.
-        var maxDepth = _radius * 0.30 * (_isAwake ? 1.0 : 0.6);
+        var maxDepth = _radius * 0.30;    // exaggerated: 4mm+ reads as heavy
 
         // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
         // dry hour, so the blue band only appears where it actually rains.
@@ -335,9 +340,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var bg = _bgColor;
         var rainMm = Application.Storage.getValue("rain_hourly");
         var rainChance = Application.Storage.getValue("rain_chance");
-        // Ripple is extra draw work; skip it while asleep regardless of the
-        // user setting to ease the AOD power budget.
-        var ripple = _cloudRipple && _isAwake;
+        var ripple = _cloudRipple;
 
         // Many small adjacent fills make up each band; with anti-aliasing on,
         // each one gets its own blended edge against the background, leaving
@@ -374,8 +377,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = cover.size() < 13 ? cover.size() : 13;
         var minHalf = _radius * 0.006;   // thin line at light cover
-        // Thinner band while asleep lights fewer pixels for the AOD budget.
-        var maxHalf = _radius * 0.065 * (_isAwake ? 1.0 : 0.6);
+        var maxHalf = _radius * 0.065;   // exaggerated: 100% reads as heavy
 
         var hw = new [n];
         var cf = new [n];
