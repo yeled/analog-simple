@@ -223,60 +223,77 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     //! Low-power weather for always-on mode. Instead of the filled bands
     //! (whose lit area grows with coverage — worst exactly when overcast),
-    //! draw outlines whose lit cost barely changes with coverage:
-    //!  - cloud: a single ring (the three altitude layers collapsed to their
-    //!    per-hour maximum), stroked as a hollow outline whose gap widens with
-    //!    coverage, so "more cloud" costs almost no extra pixels;
-    //!  - rain: a thin stroke along the band's inner edge for rainy hours.
-    //! Both reuse the 12 precomputed hour angles, so there's no trig here.
+    //! the three real cloud bands are drawn as outlines with sparse dashed
+    //! hatching inside, so most of the band stays dark and the lit cost barely
+    //! changes with coverage. Rain is a thin stroke along the band's inner
+    //! edge for rainy hours.
     private function drawWeatherAod(dc) {
         if (_showCloud) {
-            drawCloudAodOutline(dc);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_low"),  _radius * 0.78);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_mid"),  _radius * 0.64);
+            drawCloudBandAod(dc, Application.Storage.getValue("cloud_high"), _radius * 0.50);
         }
         if (_showRain) {
             drawRainAodOutline(dc);
         }
     }
 
-    //! Single collapsed cloud ring, drawn as inner+outer edge strokes.
-    private function drawCloudAodOutline(dc) {
-        var low = Application.Storage.getValue("cloud_low");
-        var mid = Application.Storage.getValue("cloud_mid");
-        var high = Application.Storage.getValue("cloud_high");
-        if (low == null || low.size() < 2) {
+    //! One cloud band in low-power mode: a thin outline (inner + outer edges)
+    //! with short radial hatch dashes inside. Curves are subdivided per hour
+    //! to round off the polygon facets. Hours with no cloud are skipped.
+    private function drawCloudBandAod(dc, cover, baseRadius) {
+        if (cover == null || cover.size() < 2) {
             return;
         }
 
-        var n = low.size() < 13 ? low.size() : 13;
-        var baseRadius = _radius * 0.70;
+        var n = cover.size() < 13 ? cover.size() : 13;
         var minHalf = _radius * 0.004;
-        var maxHalf = _radius * 0.045;   // thinner than the awake bands
+        var maxHalf = _radius * 0.05;
 
-        // Per-hour half-width from the max coverage across the three layers.
         var hw = new [n];
         for (var i = 0; i < n; i++) {
-            var c = maxCover(low, mid, high, i);
+            var c = cover[i];
+            if (c == null || c < 0) { c = 0; } else if (c > 100) { c = 100; }
             hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
         }
 
         // Dim grey keeps emitted light (and power) low in AOD.
-        dc.setColor(dimColor(0x707070), Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(2);
-        for (var i = 0; i < n - 1; i++) {
-            if (hw[i] <= 0.0 || hw[i + 1] <= 0.0) {
-                continue;  // gap where either hour is cloud-free
-            }
-            var sinA = _tickSin[i % 12];
-            var cosA = _tickCos[i % 12];
-            var sinB = _tickSin[(i + 1) % 12];
-            var cosB = _tickCos[(i + 1) % 12];
+        dc.setColor(dimColor(0x808080), Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(1);
 
-            // Outer edge.
-            dc.drawLine(_centerX + (baseRadius + hw[i]) * sinA, _centerY - (baseRadius + hw[i]) * cosA,
-                        _centerX + (baseRadius + hw[i + 1]) * sinB, _centerY - (baseRadius + hw[i + 1]) * cosB);
-            // Inner edge.
-            dc.drawLine(_centerX + (baseRadius - hw[i]) * sinA, _centerY - (baseRadius - hw[i]) * cosA,
-                        _centerX + (baseRadius - hw[i + 1]) * sinB, _centerY - (baseRadius - hw[i + 1]) * cosB);
+        var sub = 4;                 // sub-steps per hour, to round the facets
+        var hatchEvery = 2;          // a radial dash every Nth sub-step
+        var hatchMin = minHalf * 2;  // only hatch where the band has some width
+        var step = 0;
+        for (var i = 0; i < n - 1; i++) {
+            if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
+                continue;  // gap where there's no cloud
+            }
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var a0 = (i + t0) * Math.PI / 6.0;
+                var a1 = (i + t1) * Math.PI / 6.0;
+                var s0 = Math.sin(a0);
+                var c0 = Math.cos(a0);
+                var s1 = Math.sin(a1);
+                var c1 = Math.cos(a1);
+                var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
+
+                // Outer and inner edge segments (the outline).
+                dc.drawLine(_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0,
+                            _centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1);
+                dc.drawLine(_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0,
+                            _centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1);
+
+                // Radial hatch dash bridging the two edges.
+                if (step % hatchEvery == 0 && h0 > hatchMin) {
+                    dc.drawLine(_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0,
+                                _centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0);
+                }
+                step++;
+            }
         }
     }
 
@@ -302,35 +319,22 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         dc.setColor(dimColor(0x2E5A87), Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
+        var sub = 4;
         for (var i = 0; i < n - 1; i++) {
             if (inner[i] >= outerRadius && inner[i + 1] >= outerRadius) {
                 continue;  // no rain across this segment
             }
-            var sinA = _tickSin[i % 12];
-            var cosA = _tickCos[i % 12];
-            var sinB = _tickSin[(i + 1) % 12];
-            var cosB = _tickCos[(i + 1) % 12];
-            dc.drawLine(_centerX + inner[i] * sinA, _centerY - inner[i] * cosA,
-                        _centerX + inner[i + 1] * sinB, _centerY - inner[i + 1] * cosB);
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var a0 = (i + t0) * Math.PI / 6.0;
+                var a1 = (i + t1) * Math.PI / 6.0;
+                var r0 = inner[i] + (inner[i + 1] - inner[i]) * t0;
+                var r1 = inner[i] + (inner[i + 1] - inner[i]) * t1;
+                dc.drawLine(_centerX + r0 * Math.sin(a0), _centerY - r0 * Math.cos(a0),
+                            _centerX + r1 * Math.sin(a1), _centerY - r1 * Math.cos(a1));
+            }
         }
-    }
-
-    //! Max cloud coverage (0-100) across the three layers at hour i.
-    private function maxCover(low, mid, high, i) {
-        var c = 0;
-        c = coverAt(low, i, c);
-        c = coverAt(mid, i, c);
-        c = coverAt(high, i, c);
-        return c;
-    }
-
-    private function coverAt(arr, i, soFar) {
-        if (arr == null || i >= arr.size() || arr[i] == null) {
-            return soFar;
-        }
-        var v = arr[i];
-        if (v < 0) { v = 0; } else if (v > 100) { v = 100; }
-        return v > soFar ? v : soFar;
     }
 
     function onHide() {
