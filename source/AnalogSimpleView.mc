@@ -275,30 +275,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return baseRadius + _radius * 0.012 * Math.sin(ang * 2.0 + phase);
     }
 
-    //! Catmull-Rom spline value at t (0..1) between p1 and p2, using p0/p3 as
-    //! the surrounding control points.
-    private function catmullRom(p0, p1, p2, p3, t) {
-        var t2 = t * t;
-        var t3 = t2 * t;
-        return 0.5 * ((2.0 * p1)
-            + (p2 - p0) * t
-            + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
-            + (3.0 * p1 - 3.0 * p2 + p3 - p0) * t3);
-    }
-
-    //! Smoothly interpolate hourly array `arr` (length n) at segment i,
-    //! fraction t, via Catmull-Rom with end clamping. This curves the cloud
-    //! bands through the hourly points instead of joining them with straight
-    //! segments (which read as facets). Clamped to >= 0.
-    private function smoothAt(arr, n, i, t) {
-        var p0 = arr[(i > 0) ? (i - 1) : 0];
-        var p1 = arr[i];
-        var p2 = arr[i + 1];
-        var p3 = arr[(i + 2 < n) ? (i + 2) : (n - 1)];
-        var v = catmullRom(p0, p1, p2, p3, t);
-        return (v < 0.0) ? 0.0 : v;
-    }
-
     //! One cloud band in low-power mode: a solid `fillColor` fill from the
     //! inner to the outer edge, with a lighter `outlineColor` stroke around
     //! both edges so the band stays visible when the fill is nearly black.
@@ -346,8 +322,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var c0 = Math.cos(a0);
                 var s1 = Math.sin(a1);
                 var c1 = Math.cos(a1);
-                var h0 = smoothAt(hw, n, i, t0);
-                var h1 = smoothAt(hw, n, i, t1);
+                var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
                 var r0 = cloudWaveRadius(a0, baseRadius, phase);
                 var r1 = cloudWaveRadius(a1, baseRadius, phase);
 
@@ -385,8 +361,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var c0 = Math.cos(a0);
                 var s1 = Math.sin(a1);
                 var c1 = Math.cos(a1);
-                var h0 = smoothAt(hw, n, i, t0);
-                var h1 = smoothAt(hw, n, i, t1);
+                var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
                 var r0 = cloudWaveRadius(a0, baseRadius, phase);
                 var r1 = cloudWaveRadius(a1, baseRadius, phase);
 
@@ -598,8 +574,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         var n = cover.size() < 13 ? cover.size() : 13;
-        var minHalf = _radius * 0.004;   // thin line at light cover
-        var maxHalf = _radius * 0.07;    // exaggerated: 100% reads as heavy
+        var minHalf = _radius * 0.006;   // thin line at light cover
+        var maxHalf = _radius * 0.065;   // exaggerated: 100% reads as heavy
 
         var hw = new [n];
         var cf = new [n];
@@ -622,79 +598,69 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             sf[i] = storm > 1.0 ? 1.0 : storm;
         }
 
-        // Upsample the hourly points through the spline ONCE into a fine
-        // array, then draw cheap linear segments between them. The
-        // fillPolygon count (what trips the draw watchdog) stays the same as
-        // the old band, but the curve reads smooth because the spline and the
-        // trig run per fine point, not per fill.
-        var K = 3;                          // fine points per hour
-        var m = (n - 1) * K + 1;
-        var phase = baseRadius * 0.05;      // same flow as the always-on band
-        var SIN = new [m];
-        var COS = new [m];
-        var RAD = new [m];
-        var HW = new [m];
-        var CF = new [m];
-        var SF = new [m];
-        for (var j = 0; j < m; j++) {
-            var seg = j / K;
-            if (seg > n - 2) { seg = n - 2; }
-            var t = (j - seg * K) * 1.0 / K;
-            var ang = j * Math.PI / (6.0 * K);
-            SIN[j] = Math.sin(ang);
-            COS[j] = Math.cos(ang);
-            RAD[j] = cloudWaveRadius(ang, baseRadius, phase);
-            HW[j] = smoothAt(hw, n, seg, t);
-            CF[j] = cf[seg] + (cf[seg + 1] - cf[seg]) * t;   // linear colour is fine
-            SF[j] = sf[seg] + (sf[seg + 1] - sf[seg]) * t;
-        }
-
-        var layers = 2;
-        var fadeDenom = (layers > 1) ? (layers - 1) : 1;
-        for (var j = 0; j < m - 1; j++) {
-            if (HW[j] <= 0.0 && HW[j + 1] <= 0.0) {
-                continue;  // no cloud across this fine segment
+        var sub = 2;
+        var layers = 3;
+        for (var i = 0; i < n - 1; i++) {
+            if (hw[i] <= 0.0 && hw[i + 1] <= 0.0) {
+                continue;  // no cloud across this segment
             }
-            var sinA = SIN[j];
-            var cosA = COS[j];
-            var sinB = SIN[j + 1];
-            var cosB = COS[j + 1];
-            var rA = RAD[j];
-            var rB = RAD[j + 1];
-            var hwA = HW[j];
-            var hwB = HW[j + 1];
+            for (var s = 0; s < sub; s++) {
+                var t0 = s * 1.0 / sub;
+                var t1 = (s + 1) * 1.0 / sub;
+                var angA = (i + t0) * Math.PI / 6.0;
+                var angB = (i + t1) * Math.PI / 6.0;
+                var sinA = Math.sin(angA);
+                var cosA = Math.cos(angA);
+                var sinB = Math.sin(angB);
+                var cosB = Math.cos(angB);
+                var hwA = hw[i] + (hw[i + 1] - hw[i]) * t0;
+                var hwB = hw[i] + (hw[i + 1] - hw[i]) * t1;
+                var cfA = cf[i] + (cf[i + 1] - cf[i]) * t0;
+                var cfB = cf[i] + (cf[i + 1] - cf[i]) * t1;
+                var sfA = sf[i] + (sf[i + 1] - sf[i]) * t0;
+                var sfB = sf[i] + (sf[i + 1] - sf[i]) * t1;
 
-            var rippleAmt = 0.0;
-            if (ripple) {
-                rippleAmt = Math.sin((j + 0.5) * Math.PI / (6.0 * K) * 5.0 + baseRadius * 0.7) * 0.12;
-            }
-            var cf2 = (CF[j] + CF[j + 1]) / 2.0 + rippleAmt;
-            if (cf2 < 0.0) {
-                cf2 = 0.0;
-            } else if (cf2 > 1.0) {
-                cf2 = 1.0;
-            }
-            var base = dimColor(cloudColor(cf2, (SF[j] + SF[j + 1]) / 2.0));
+                // Ripple the colour along the band so it doesn't read as a
+                // flat tint: a gentle sine wave nudges the coverage fraction
+                // up and down, shifting whiter/greyer/bluer in waves. Each
+                // band gets its own phase (from baseRadius) so the three
+                // rings don't ripple in lockstep. Optional: the extra sine
+                // call and per-segment colour changes add draw work that can
+                // trip a device's Always-On Display power budget.
+                var rippleAmt = 0.0;
+                if (ripple) {
+                    var midAngle = (angA + angB) / 2.0;
+                    rippleAmt = Math.sin(midAngle * 5.0 + baseRadius * 0.7) * 0.12;
+                }
+                var cf2 = (cfA + cfB) / 2.0 + rippleAmt;
+                if (cf2 < 0.0) {
+                    cf2 = 0.0;
+                } else if (cf2 > 1.0) {
+                    cf2 = 1.0;
+                }
+                var base = dimColor(cloudColor(cf2, (sfA + sfB) / 2.0));
 
-            for (var k = 0; k < layers; k++) {
-                var g0 = k * 1.0 / layers;
-                var g1 = (k + 1) * 1.0 / layers;
-                dc.setColor(bandColor(base, bg, k * 1.0 / fadeDenom), Graphics.COLOR_TRANSPARENT);
+                var fadeDenom = (layers > 1) ? (layers - 1) : 1;
+                for (var k = 0; k < layers; k++) {
+                    var g0 = k * 1.0 / layers;
+                    var g1 = (k + 1) * 1.0 / layers;
+                    dc.setColor(bandColor(base, bg, k * 1.0 / fadeDenom), Graphics.COLOR_TRANSPARENT);
 
-                // Outer half of the band.
-                dc.fillPolygon([
-                    [_centerX + (rA + hwA * g0) * sinA, _centerY - (rA + hwA * g0) * cosA],
-                    [_centerX + (rB + hwB * g0) * sinB, _centerY - (rB + hwB * g0) * cosB],
-                    [_centerX + (rB + hwB * g1) * sinB, _centerY - (rB + hwB * g1) * cosB],
-                    [_centerX + (rA + hwA * g1) * sinA, _centerY - (rA + hwA * g1) * cosA]
-                ]);
-                // Inner half of the band.
-                dc.fillPolygon([
-                    [_centerX + (rA - hwA * g1) * sinA, _centerY - (rA - hwA * g1) * cosA],
-                    [_centerX + (rB - hwB * g1) * sinB, _centerY - (rB - hwB * g1) * cosB],
-                    [_centerX + (rB - hwB * g0) * sinB, _centerY - (rB - hwB * g0) * cosB],
-                    [_centerX + (rA - hwA * g0) * sinA, _centerY - (rA - hwA * g0) * cosA]
-                ]);
+                    // Outer half of the band.
+                    dc.fillPolygon([
+                        [_centerX + (baseRadius + hwA * g0) * sinA, _centerY - (baseRadius + hwA * g0) * cosA],
+                        [_centerX + (baseRadius + hwB * g0) * sinB, _centerY - (baseRadius + hwB * g0) * cosB],
+                        [_centerX + (baseRadius + hwB * g1) * sinB, _centerY - (baseRadius + hwB * g1) * cosB],
+                        [_centerX + (baseRadius + hwA * g1) * sinA, _centerY - (baseRadius + hwA * g1) * cosA]
+                    ]);
+                    // Inner half of the band.
+                    dc.fillPolygon([
+                        [_centerX + (baseRadius - hwA * g1) * sinA, _centerY - (baseRadius - hwA * g1) * cosA],
+                        [_centerX + (baseRadius - hwB * g1) * sinB, _centerY - (baseRadius - hwB * g1) * cosB],
+                        [_centerX + (baseRadius - hwB * g0) * sinB, _centerY - (baseRadius - hwB * g0) * cosB],
+                        [_centerX + (baseRadius - hwA * g0) * sinA, _centerY - (baseRadius - hwA * g0) * cosA]
+                    ]);
+                }
             }
         }
     }
