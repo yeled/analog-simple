@@ -268,10 +268,18 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return (count > 0) ? (total / count) / 100.0 : 0.0;
     }
 
+    //! Gently wave a cloud band's centre radius along the angle so the ring
+    //! flows ("swooshes") instead of sitting as a rigid circle. Small
+    //! amplitude so the three bands don't collide at heavy coverage.
+    private function cloudWaveRadius(ang, baseRadius, phase) {
+        return baseRadius + _radius * 0.012 * Math.sin(ang * 2.0 + phase);
+    }
+
     //! One cloud band in low-power mode: a solid `fillColor` fill from the
     //! inner to the outer edge, with a lighter `outlineColor` stroke around
     //! both edges so the band stays visible when the fill is nearly black.
-    //! Subdivided per hour to round the facets; cloud-free hours are skipped.
+    //! Subdivided finely per hour and given a flowing radius wave + brightness
+    //! swoosh; cloud-free hours are skipped.
     private function drawCloudBandAod(dc, cover, baseRadius, fillColor, outlineColor) {
         if (cover == null || cover.size() < 2) {
             return;
@@ -288,15 +296,16 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             hw[i] = (c <= 0) ? 0.0 : minHalf + (maxHalf - minHalf) * (c / 100.0);
         }
 
-        var sub = 4;   // sub-steps per hour, to round the facets
+        var sub = 8;   // fine sub-steps per hour for smooth, flowing curves
+        var phase = baseRadius * 0.05;   // each band sweeps on its own phase
         var aa = (dc has :setAntiAlias);
 
         // Fill pass: AA off so the contiguous sub-step quads don't seam.
         if (aa) { dc.setAntiAlias(false); }
-        // When the ripple is on, the fill grey undulates along the band (a
-        // sine wave, its own phase per band) from solid down to black — which
-        // reads as transparent on the black AOD background — so the cloud
-        // fades in and out; otherwise it's a single grey set once.
+        // With the ripple on, the fill brightness flows along the band as a
+        // slow, layered sine "swoosh" — solid where it peaks, fading to black
+        // (transparent on the AOD background) in the troughs; otherwise it's a
+        // single grey set once.
         if (!_cloudRipple) {
             dc.setColor(fillColor, Graphics.COLOR_TRANSPARENT);
         }
@@ -315,20 +324,22 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var c1 = Math.cos(a1);
                 var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
                 var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
+                var r0 = cloudWaveRadius(a0, baseRadius, phase);
+                var r1 = cloudWaveRadius(a1, baseRadius, phase);
 
                 if (_cloudRipple) {
                     var mid = (a0 + a1) / 2.0;
-                    // 0.0 at the trough (black / "transparent") up to 1.4x
-                    // (solid, slightly boosted) at the peak.
-                    var f = 0.7 + 0.7 * Math.sin(mid * 5.0 + baseRadius * 0.7);
-                    dc.setColor(scaleColor(fillColor, f), Graphics.COLOR_TRANSPARENT);
+                    // Two slow sines layered for an organic sweep: ~0 at the
+                    // troughs (black) up to ~1.4x (solid) at the peaks.
+                    var sweep = Math.sin(mid * 2.3 + phase) + 0.6 * Math.sin(mid * 1.1 - phase * 0.7);
+                    dc.setColor(scaleColor(fillColor, 0.7 + 0.45 * sweep), Graphics.COLOR_TRANSPARENT);
                 }
 
                 dc.fillPolygon([
-                    [_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0],
-                    [_centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1],
-                    [_centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1],
-                    [_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0]
+                    [_centerX + (r0 + h0) * s0, _centerY - (r0 + h0) * c0],
+                    [_centerX + (r1 + h1) * s1, _centerY - (r1 + h1) * c1],
+                    [_centerX + (r1 - h1) * s1, _centerY - (r1 - h1) * c1],
+                    [_centerX + (r0 - h0) * s0, _centerY - (r0 - h0) * c0]
                 ]);
             }
         }
@@ -352,11 +363,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var c1 = Math.cos(a1);
                 var h0 = hw[i] + (hw[i + 1] - hw[i]) * t0;
                 var h1 = hw[i] + (hw[i + 1] - hw[i]) * t1;
+                var r0 = cloudWaveRadius(a0, baseRadius, phase);
+                var r1 = cloudWaveRadius(a1, baseRadius, phase);
 
-                dc.drawLine(_centerX + (baseRadius + h0) * s0, _centerY - (baseRadius + h0) * c0,
-                            _centerX + (baseRadius + h1) * s1, _centerY - (baseRadius + h1) * c1);
-                dc.drawLine(_centerX + (baseRadius - h0) * s0, _centerY - (baseRadius - h0) * c0,
-                            _centerX + (baseRadius - h1) * s1, _centerY - (baseRadius - h1) * c1);
+                dc.drawLine(_centerX + (r0 + h0) * s0, _centerY - (r0 + h0) * c0,
+                            _centerX + (r1 + h1) * s1, _centerY - (r1 + h1) * c1);
+                dc.drawLine(_centerX + (r0 - h0) * s0, _centerY - (r0 - h0) * c0,
+                            _centerX + (r1 - h1) * s1, _centerY - (r1 - h1) * c1);
             }
         }
     }
