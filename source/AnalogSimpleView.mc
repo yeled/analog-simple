@@ -86,6 +86,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _ringPercent = 0;
     private var _ringPercentTime = -1;
 
+    // Extreme-temperature markers, computed with the static layer but drawn
+    // over the hands. Null when there's nothing to draw.
+    private var _tempMarks = null;
+
     function initialize() {
         WatchFace.initialize();
         _hasAlpha = (Graphics has :createColor);
@@ -173,6 +177,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             dc.setAntiAlias(true);
         }
         drawHands(dc);
+
+        // Over the hands, not under them: the labels live in the middle of
+        // the dial where the hands converge, so anything in the static buffer
+        // gets covered.
+        if (_tempMarks != null) {
+            drawTempExtremes(dc);
+        }
     }
 
     //! (Re)allocate the offscreen buffer if needed and render the static layer
@@ -221,6 +232,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
         dc.setColor(_bgColor, _bgColor);
         dc.clear();
+
+        // Recomputed below if the temperature line draws; stale markers would
+        // otherwise outlive the data or the setting that produced them.
+        _tempMarks = null;
 
         drawTicks(dc);
         // The full weather bands are the heaviest thing drawn (big lit area,
@@ -739,16 +754,17 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         if (_tempExtremes) {
-            drawTempExtremes(dc, vals, mid, span);
+            _tempMarks = computeTempMarks(vals, mid, span);
         }
     }
 
-    //! Mark the warmest and coldest hour with a short notch across the
-    //! temperature line, labelled with the value. The notch straddles the
-    //! curve at its actual radius, so it crosses the line exactly at the peak
-    //! and the trough. The cool notch is a muted violet rather than a blue —
-    //! a cool tick near the rain ribbon would otherwise read as part of it.
-    function drawTempExtremes(dc, vals, mid, span) {
+    //! Work out where the warmest and coldest hour's notch and label go, as
+    //! [x, y, labelX, labelY, colour, text] per mark. This is computed with
+    //! the rest of the static layer but *drawn* after the hands — the labels
+    //! sit around 0.24 R, in the crush where the hands converge, so anything
+    //! left in the static buffer gets blitted over. There is no radial
+    //! position that avoids the hands; drawing on top is the only fix.
+    function computeTempMarks(vals, mid, span) {
         var loIndex = 0;
         var hiIndex = 0;
         for (var i = 1; i < vals.size(); i++) {
@@ -756,28 +772,45 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             if (vals[i] > vals[hiIndex]) { hiIndex = i; }
         }
 
-        var marks = [[hiIndex, TEMP_HOT_MARK], [loIndex, TEMP_COLD_MARK]];
-        for (var m = 0; m < marks.size(); m++) {
-            var i = marks[m][0];
-            var color = dimColor(marks[m][1]);
+        var source = [[hiIndex, TEMP_HOT_MARK], [loIndex, TEMP_COLD_MARK]];
+        var marks = new [source.size()];
+        var half = _radius * 0.035;
+        for (var m = 0; m < source.size(); m++) {
+            var i = source[m][0];
             var v = vals[i];
             var r = TEMP_RADIUS * _radius + ((v - mid) / span) * 2.0 * TEMP_AMP * _radius;
             var ang = i * Math.PI / 6.0;
             var sin = Math.sin(ang);
             var cos = Math.cos(ang);
-            var half = _radius * 0.035;
-
-            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-            dc.setPenWidth(3);
-            dc.drawLine(_centerX + (r - half) * sin, _centerY - (r - half) * cos,
-                        _centerX + (r + half) * sin, _centerY - (r + half) * cos);
-
-            // Label sits inward of the notch, in the empty middle of the dial
-            // — well clear of the battery box, which starts at 0.495 R.
+            // Label sits inward of the notch, in the middle of the dial —
+            // well clear of the battery box, which starts at 0.495 R.
             var lr = r - _radius * 0.12;
-            dc.drawText(_centerX + lr * sin, _centerY - lr * cos,
-                Graphics.FONT_XTINY, formatTemp(v),
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            marks[m] = [
+                _centerX + (r - half) * sin, _centerY - (r - half) * cos,
+                _centerX + (r + half) * sin, _centerY - (r + half) * cos,
+                _centerX + lr * sin, _centerY - lr * cos,
+                dimColor(source[m][1]), formatTemp(v)
+            ];
+        }
+        return marks;
+    }
+
+    //! Draw the cached extreme markers over the top of the hands. Each label
+    //! gets a one-pixel background-coloured shadow first: the hands are white
+    //! and the warm label is pale, so without it the text dissolves wherever
+    //! the two cross.
+    function drawTempExtremes(dc) {
+        dc.setPenWidth(3);
+        for (var m = 0; m < _tempMarks.size(); m++) {
+            var mark = _tempMarks[m];
+            dc.setColor(mark[6], Graphics.COLOR_TRANSPARENT);
+            dc.drawLine(mark[0], mark[1], mark[2], mark[3]);
+
+            var justify = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+            dc.setColor(_bgColor, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(mark[4] + 1, mark[5] + 1, Graphics.FONT_XTINY, mark[7], justify);
+            dc.setColor(mark[6], Graphics.COLOR_TRANSPARENT);
+            dc.drawText(mark[4], mark[5], Graphics.FONT_XTINY, mark[7], justify);
         }
     }
 
