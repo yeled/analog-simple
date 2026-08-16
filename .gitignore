@@ -2,3 +2,4 @@ bin/
 *.iq
 *.prg
 *.prg.debug.xml
+.DS_Store
