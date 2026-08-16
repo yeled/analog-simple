@@ -13,12 +13,16 @@ manifest to use them.
 ## Build & run
 
 The SDK lives under `~/Library/Application Support/Garmin/ConnectIQ/Sdks/`
-(currently `connectiq-sdk-mac-9.1.0-2026-03-09-6a872a80b`). The signing key
-is `/Users/yeled/Downloads/developer_key`.
+(currently `connectiq-sdk-mac-9.2.0-2026-06-09-92a1605b2`). The signing key is
+`~/Downloads/developer_key` — don't hardcode a `/Users/<name>/` path, this
+repo gets worked on from more than one account.
+
+Resolve the SDK by glob rather than pinning the version, so a manager update
+doesn't silently break every command below:
 
 ```sh
-SDK="$HOME/Library/Application Support/Garmin/ConnectIQ/Sdks/connectiq-sdk-mac-9.1.0-2026-03-09-6a872a80b"
-KEY=/Users/yeled/Downloads/developer_key
+SDK="$(ls -d "$HOME/Library/Application Support/Garmin/ConnectIQ/Sdks"/connectiq-sdk-mac-* | sort -V | tail -1)"
+KEY=~/Downloads/developer_key
 
 # Device build for the simulator
 java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
@@ -35,6 +39,15 @@ java -Xms1g -Dapple.awt.UIElement=true -jar "$SDK/bin/monkeybrains.jar" \
 ```
 
 `bin/` is gitignored; build artifacts are never committed.
+
+**Device profiles are installed per-SDK, and a fresh SDK ships with none of
+them.** If a build dies with `ERROR: Invalid device id specified: 'venu445mm'`
+the code is fine — the profile just isn't downloaded. Check with
+`ls ~/Library/Application Support/Garmin/ConnectIQ/Devices/ | grep venu`, and
+if it's empty install the Venu 4 sizes from the **Connect IQ SDK Manager**
+(the `.dmg` is in `~/Downloads`; there is no CLI for this). Compiling against
+some *other* already-installed device in the manifest is a perfectly good
+syntax check while you wait.
 
 ## Versioning, branches & releases
 
@@ -69,6 +82,13 @@ tags as part of completing work. Still treat large branch-topology moves
 (merging beta → `public` for a global release) and store uploads as deliberate
 steps: do them when asked and report clearly.
 
+**Commits are signed through 1Password** (`commit.gpgsign=true`,
+`gpg.format=ssh`, signer `op-ssh-sign`). Signing needs a GUI approval, so in a
+non-interactive shell `git commit` either dies with `1Password: failed to fill
+whole buffer` or just hangs until it times out. That is not a repo problem and
+**not a reason to reach for `--no-gpg-sign`** — it's the user's policy. Say the
+commit is waiting on the prompt, and retry once they're at the keyboard.
+
 ## Simulator gotchas (learned the hard way)
 
 - The simulator **persists app settings across reinstalls**: loading a new
@@ -78,11 +98,20 @@ steps: do them when asked and report clearly.
 - `monkeydo` can take 10-20s to swap an already-running app, and prints
   nothing on success — wait before judging what's on screen.
 - Screenshots: `screencapture` needs Screen Recording permission (without it
-  you silently get wallpaper-only images). Use the simulator's own
-  **File → Save Screen Capture** instead — it saves just the device screen
-  and can be driven via System Events UI scripting. Save them into `bin/`
-  named with the version (e.g. `bin/analog-simple-1.0.10-beta12.png`); `bin/`
-  is gitignored so they're never committed.
+  you silently get wallpaper-only images). The simulator's own
+  **File → Save Screen Capture** saves just the device screen — but driving
+  its save sheet via System Events UI scripting is unreliable (2026-08-16: the
+  sheet opens, then swallows `Cmd+Shift+G`, typed paths and `set value of text
+  field 1` alike, and closes without writing). Treat screenshots as a
+  **human-in-the-loop step**: ask, rather than burning turns on the dialog.
+  Save them into `bin/` named with the version (e.g.
+  `bin/analog-simple-1.0.10-beta12.png`); `bin/` is gitignored so they're
+  never committed.
+- **The weather layers need cached data to draw anything.** A fresh simulator
+  has no `rain_hourly` / `temp_hourly` in `Application.Storage`, so the rain,
+  cloud and temperature draws all return early and the face looks bare — this
+  is not a bug. Seed them via **File → Edit Persistent Storage**, or fire the
+  background fetch with **Simulation → Background Events**.
 - If `monkeydo` says "Unable to connect to simulator", the sim is wedged:
   `pkill -f "ConnectIQ.app/Contents/MacOS/simulator"` and relaunch.
 
