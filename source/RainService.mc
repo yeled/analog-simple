@@ -14,6 +14,7 @@ import Toybox.Time;
 //!   "cloud_low"    => Array<Number>  low-altitude cloud cover 0-100
 //!   "cloud_mid"    => Array<Number>  mid-altitude cloud cover 0-100
 //!   "cloud_high"   => Array<Number>  high-altitude cloud cover 0-100
+//!   "temp_hourly"  => Array<Float>   air temperature in °C
 //!   "rain_updated" => Number         epoch seconds of the last good fetch
 (:background)
 class RainService {
@@ -26,7 +27,7 @@ class RainService {
             {
                 "latitude"       => lat,
                 "longitude"      => lon,
-                "hourly"         => "precipitation,precipitation_probability,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high",
+                "hourly"         => "precipitation,precipitation_probability,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m",
                 "models"         => "ecmwf_ifs",
                 "timeformat"     => "unixtime",
                 "forecast_hours"  => 13
@@ -53,6 +54,7 @@ class RainService {
         var cloudMid = hourly.get("cloud_cover_mid") as Array?;
         var cloudHigh = hourly.get("cloud_cover_high") as Array?;
         var rainChance = hourly.get("precipitation_probability") as Array?;
+        var temperature = hourly.get("temperature_2m") as Array?;
 
         // Find the slot for the current hour, then take the next 12 hours.
         var now = Time.now().value();
@@ -72,6 +74,7 @@ class RainService {
         var low = [] as Array<Number>;    // low-altitude cloud cover 0-100
         var mid = [] as Array<Number>;    // mid-altitude cloud cover 0-100
         var high = [] as Array<Number>;   // high-altitude cloud cover 0-100
+        var temps = [] as Array<Float?>;  // air temperature in °C
         for (var i = start; i < times.size() && rain.size() < 13; i++) {
             var mm = precip[i];
             rain.add(mm == null ? 0.0 : (mm as Float).toFloat());
@@ -79,6 +82,7 @@ class RainService {
             low.add(num(cloudLow, i));
             mid.add(num(cloudMid, i));
             high.add(num(cloudHigh, i));
+            temps.add(dec(temperature, i));
         }
 
         Application.Storage.setValue("rain_hourly", rain);
@@ -86,6 +90,7 @@ class RainService {
         Application.Storage.setValue("cloud_low", low);
         Application.Storage.setValue("cloud_mid", mid);
         Application.Storage.setValue("cloud_high", high);
+        Application.Storage.setValue("temp_hourly", temps);
         Application.Storage.setValue("rain_updated", now);
     }
 
@@ -93,5 +98,13 @@ class RainService {
     hidden function num(arr as Array?, i as Number) as Number {
         if (arr == null || i >= arr.size() || arr[i] == null) { return 0; }
         return arr[i] as Number;
+    }
+
+    // Read array[i] as a Float, preserving null when missing. Unlike the
+    // 0-100 cover values, 0 is a perfectly plausible temperature — a gap has
+    // to stay distinguishable from a genuine 0 °C.
+    hidden function dec(arr as Array?, i as Number) as Float? {
+        if (arr == null || i >= arr.size() || arr[i] == null) { return null; }
+        return (arr[i] as Decimal).toFloat();
     }
 }

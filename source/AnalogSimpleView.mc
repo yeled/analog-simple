@@ -17,6 +17,22 @@ const HAND_STYLE_ROUNDED = 3;
 const RING_SOURCE_BODY_BATTERY = 0;
 const RING_SOURCE_WATCH_BATTERY = 1;
 
+// Temperature hairline. It sits inside all three cloud bands (0.78 / 0.64 /
+// 0.50 R) so the weather layers can grow as thick as they like without ever
+// crowding it. The ceiling is the high cloud band: centred on 0.50 R with a
+// half-width up to 0.065 R (see drawCloudBand), its inner edge reaches
+// 0.435 R at full coverage. The line's warmest excursion is
+// TEMP_RADIUS + TEMP_AMP = 0.425 R, which stays just clear of that — keep
+// the sum under 0.435 if you retune these.
+const TEMP_RADIUS = 0.355;     // fraction of _radius the line centres on
+const TEMP_AMP = 0.07;         // peak deviation, in fractions of _radius
+const TEMP_MIN_SPAN = 8.0;     // °C mapped across the full amplitude, minimum
+const TEMP_COLD = 0x4A2A18;    // dim ember — coldest hour
+const TEMP_MID = 0xE8B84B;     // amber — mid range
+const TEMP_HOT = 0xFFF0C4;     // near-white — warmest hour
+const TEMP_HOT_MARK = 0xFFE9A8;
+const TEMP_COLD_MARK = 0x9C8FB5;
+
 class AnalogSimpleView extends WatchUi.WatchFace {
 
     private var _screenWidth = 0;
@@ -47,6 +63,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _showRain = true;
     private var _showCloud = true;
     private var _cloudRipple = true;
+    private var _showTemp = true;
+    private var _tempExtremes = false;
     private var _weatherInAOD = false;
     private var _ringSource = RING_SOURCE_BODY_BATTERY;
     private var _ringByLevel = true;
@@ -117,6 +135,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         _showRain       = getBooleanProperty("ShowRainForecast", true);
         _showCloud      = getBooleanProperty("ShowCloudCover", true);
         _cloudRipple    = getBooleanProperty("CloudCoverRipple", true);
+        _showTemp       = getBooleanProperty("ShowTemperature", true);
+        _tempExtremes   = getBooleanProperty("ShowTempExtremes", false);
         _weatherInAOD   = getBooleanProperty("ShowWeatherInAOD", false);
         _ringSource     = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
         _ringByLevel    = getBooleanProperty("RingColorByLevel", true);
@@ -214,6 +234,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             }
             if (_showCloud) {
                 drawCloudCover(dc);
+            }
+            if (_showTemp) {
+                drawTemperature(dc);
             }
         } else if (_weatherInAOD) {
             drawWeatherAod(dc);
@@ -663,6 +686,197 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             return lerpColor(0xFFFFFF, 0xCCCCCC, coverFraction / 0.5);
         }
         return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5 * stormFraction);
+    }
+
+    //! Draw the next 12 hours of air temperature as a hairline inside the
+    //! cloud bands: the line's *radius* carries the temperature (warmer =
+    //! further out) and its *colour* warms along the same scale, from a dim
+    //! ember through amber to near-white. Both ends of the ramp stay in the
+    //! warm half of the spectrum on purpose — nothing on this line can be
+    //! mistaken for the blue rain ribbon at the rim. 12 o'clock is the
+    //! soonest hour, clockwise, matching the rain and cloud bands.
+    function drawTemperature(dc) {
+        var vals = temperatureSeries();
+        if (vals == null) {
+            return;
+        }
+
+        var mid = tempMid(vals);
+        var span = tempSpan(vals);
+
+        var penWidth = (_radius * 0.014).toNumber();
+        if (penWidth < 2) {
+            penWidth = 2;
+        }
+        dc.setPenWidth(penWidth);
+
+        // Catmull-Rom through the hourly points so the curve reads as a
+        // smooth trace rather than a 12-sided polygon.
+        var n = vals.size();
+        var sub = 6;
+        var prevX = null;
+        var prevY = null;
+        for (var i = 0; i < n - 1; i++) {
+            for (var s = 0; s <= sub; s++) {
+                if (s == sub && i < n - 2) {
+                    continue;   // next segment's s==0 covers this point
+                }
+                var t = s * 1.0 / sub;
+                var v = catmullAt(vals, i, t);
+                var frac = (v - mid) / span;      // -0.5 .. 0.5
+                var r = TEMP_RADIUS * _radius + frac * 2.0 * TEMP_AMP * _radius;
+                var ang = (i + t) * Math.PI / 6.0;
+                var x = _centerX + r * Math.sin(ang);
+                var y = _centerY - r * Math.cos(ang);
+
+                if (prevX != null) {
+                    dc.setColor(dimColor(tempRamp(frac + 0.5)), Graphics.COLOR_TRANSPARENT);
+                    dc.drawLine(prevX, prevY, x, y);
+                }
+                prevX = x;
+                prevY = y;
+            }
+        }
+
+        if (_tempExtremes) {
+            drawTempExtremes(dc, vals, mid, span);
+        }
+    }
+
+    //! Mark the warmest and coldest hour with a short notch across the
+    //! temperature line, labelled with the value. The notch straddles the
+    //! curve at its actual radius, so it crosses the line exactly at the peak
+    //! and the trough. The cool notch is a muted violet rather than a blue —
+    //! a cool tick near the rain ribbon would otherwise read as part of it.
+    function drawTempExtremes(dc, vals, mid, span) {
+        var loIndex = 0;
+        var hiIndex = 0;
+        for (var i = 1; i < vals.size(); i++) {
+            if (vals[i] < vals[loIndex]) { loIndex = i; }
+            if (vals[i] > vals[hiIndex]) { hiIndex = i; }
+        }
+
+        var marks = [[hiIndex, TEMP_HOT_MARK], [loIndex, TEMP_COLD_MARK]];
+        for (var m = 0; m < marks.size(); m++) {
+            var i = marks[m][0];
+            var color = dimColor(marks[m][1]);
+            var v = vals[i];
+            var r = TEMP_RADIUS * _radius + ((v - mid) / span) * 2.0 * TEMP_AMP * _radius;
+            var ang = i * Math.PI / 6.0;
+            var sin = Math.sin(ang);
+            var cos = Math.cos(ang);
+            var half = _radius * 0.035;
+
+            dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+            dc.setPenWidth(3);
+            dc.drawLine(_centerX + (r - half) * sin, _centerY - (r - half) * cos,
+                        _centerX + (r + half) * sin, _centerY - (r + half) * cos);
+
+            // Label sits inward of the notch, in the empty middle of the dial
+            // — well clear of the battery box, which starts at 0.495 R.
+            var lr = r - _radius * 0.12;
+            dc.drawText(_centerX + lr * sin, _centerY - lr * cos,
+                Graphics.FONT_XTINY, formatTemp(v),
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        }
+    }
+
+    //! The cached hourly temperatures as a clean Float array, or null if
+    //! there is nothing usable. Gaps are filled from the nearest known hour
+    //! so a single missing sample doesn't punch a hole in the curve.
+    function temperatureSeries() {
+        var raw = Application.Storage.getValue("temp_hourly");
+        if (raw == null || raw.size() < 2) {
+            return null;
+        }
+
+        var n = raw.size() < 13 ? raw.size() : 13;
+        var vals = new [n];
+        var last = null;
+        for (var i = 0; i < n; i++) {
+            var v = raw[i];
+            if (v != null) {
+                last = v.toFloat();
+            }
+            vals[i] = last;      // null until the first real sample
+        }
+        if (last == null) {
+            return null;         // no usable data at all
+        }
+        // Backfill any leading gap with the first known value.
+        var first = null;
+        for (var i = 0; i < n; i++) {
+            if (vals[i] != null) {
+                first = vals[i];
+                break;
+            }
+        }
+        for (var i = 0; i < n && vals[i] == null; i++) {
+            vals[i] = first;
+        }
+        return vals;
+    }
+
+    //! Midpoint of the day's temperature range — the radius the line sits at.
+    function tempMid(vals) {
+        var lo = vals[0];
+        var hi = vals[0];
+        for (var i = 1; i < vals.size(); i++) {
+            if (vals[i] < lo) { lo = vals[i]; }
+            if (vals[i] > hi) { hi = vals[i]; }
+        }
+        return (lo + hi) / 2.0;
+    }
+
+    //! Degrees mapped across the full amplitude of the line. The scale
+    //! adapts to the day's own range so a flat day still shows its shape,
+    //! but never below TEMP_MIN_SPAN — otherwise a 1° drift would be
+    //! amplified into a dramatic-looking swing.
+    function tempSpan(vals) {
+        var lo = vals[0];
+        var hi = vals[0];
+        for (var i = 1; i < vals.size(); i++) {
+            if (vals[i] < lo) { lo = vals[i]; }
+            if (vals[i] > hi) { hi = vals[i]; }
+        }
+        var span = hi - lo;
+        return span < TEMP_MIN_SPAN ? TEMP_MIN_SPAN : span;
+    }
+
+    //! Catmull-Rom interpolation of `vals` at position i+t, clamping the
+    //! control points at the ends of the series.
+    function catmullAt(vals, i, t) {
+        var n = vals.size();
+        var i0 = (i - 1 < 0) ? 0 : i - 1;
+        var i3 = (i + 2 > n - 1) ? n - 1 : i + 2;
+        var p0 = vals[i0] * 1.0;
+        var p1 = vals[i] * 1.0;
+        var p2 = vals[i + 1] * 1.0;
+        var p3 = vals[i3] * 1.0;
+        return 0.5 * ((2.0 * p1)
+            + (-p0 + p2) * t
+            + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t * t
+            + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t * t * t);
+    }
+
+    //! Warm-only temperature ramp: dim ember (coldest) through amber to
+    //! near-white (warmest). Deliberately never enters the blues.
+    function tempRamp(t) {
+        if (t < 0.0) { t = 0.0; } else if (t > 1.0) { t = 1.0; }
+        if (t < 0.5) {
+            return lerpColor(TEMP_COLD, TEMP_MID, t * 2.0);
+        }
+        return lerpColor(TEMP_MID, TEMP_HOT, (t - 0.5) * 2.0);
+    }
+
+    //! Format a °C value for display in the watch's configured units.
+    function formatTemp(celsius) {
+        var value = celsius;
+        var settings = System.getDeviceSettings();
+        if (settings != null && settings.temperatureUnits == System.UNIT_STATUTE) {
+            value = celsius * 9.0 / 5.0 + 32.0;
+        }
+        return (value + (value < 0 ? -0.5 : 0.5)).toNumber().format("%d") + "°";
     }
 
     //! Draw the hour, minute and (optionally) second hands
