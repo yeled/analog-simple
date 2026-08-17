@@ -35,7 +35,13 @@ the Rounded Lume and Diamond hand styles.*
   to the centre, and each line thickens with that layer's coverage. The line
   colour runs from white (thin/wispy) through grey, shifting toward a
   blue-grey storm tint only for hours where rain is forecast or likely.
-- Both forecasts are fetched in the background from
+- An optional 12-hour **temperature** trace inside the cloud bands, drawn
+  either as a ring of radial spark bars (one spoke per minute mark, rising
+  with the temperature) or as a single thin curve. Either way it reaches
+  outward and brightens from a dim ember through amber to near-white as it
+  gets warmer, on a scale that adapts to the day's own range. The warmest
+  and coldest hour can optionally be marked with a notch and the value.
+- All three forecasts are fetched in the background from
   [Open-Meteo](https://open-meteo.com/) (ECMWF model) and need the watch's
   location (or a manual lat/long override) plus a phone connection to
   refresh.
@@ -79,6 +85,10 @@ app after installing the watch face:
 | Rain Forecast | Show the next 12 hours of rain amount as a blue gradient band around the bezel (Open-Meteo) |
 | Cloud Cover | Show low/mid/high cloud cover as three grey gradient lines (Open-Meteo) |
 | Cloud Color Ripple | Vary each cloud line's colour in waves along the ring instead of a flat tint (turn off if it trips Always-On Display) |
+| Temperature | Show the next 12 hours of temperature inside the cloud bands (Open-Meteo) |
+| Temperature Style | Spark Bars (default) — a ring of radial spokes — or Hairline Curve |
+| Temperature High / Low | Mark the warmest and coldest hour with a notch and the value |
+| Weather in Always-On | Keep a lightweight version of the forecast on screen while the display is dimmed |
 | Location Override | Force the weather location to a "latitude,longitude" pair instead of GPS |
 | Date Color | Color of the day number |
 | Battery Ring Source | Body Battery or Watch Battery |
