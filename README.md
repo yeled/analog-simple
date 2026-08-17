@@ -1,15 +1,17 @@
 # analog-simple
 
-A configurable analog watch face for the Garmin Venu 4 (41mm), built with
-the Connect IQ SDK.
+A configurable analog watch face for the Garmin Venu 4 in both sizes
+(`venu445mm` and `venu441mm`, the 4S), built with the Connect IQ SDK. The
+published build ships to the wider Venu / Fenix / Forerunner family as well
+— see `scripts/set-manifest.sh` for the exact device list.
 
 | 85% — green | 45% — yellow | 15% — red |
 | --- | --- | --- |
 | ![High battery](screenshots/ring-high.png) | ![Mid battery](screenshots/ring-mid.png) | ![Low battery](screenshots/ring-low.png) |
 
 *The battery ring around the date box changes color with the remaining
-level. Shown with the default Sword hands (parallel blades with a
-transparent lume channel) at 60% color brightness.*
+level. Shown with the Sword hands (parallel blades with a transparent lume
+channel) at 60% color brightness.*
 
 | Clear | Light rain | Heavy rain + cloud | Cloudy |
 | --- | --- | --- | --- |
@@ -61,10 +63,15 @@ the Rounded Lume and Diamond hand styles.*
 
 ## Project layout
 
-- `manifest.xml` - app manifest (targets `venu441mm`).
+- `manifest.xml` - app manifest. Generated, not hand-edited: run
+  `scripts/set-manifest.sh beta|public` to stamp it with the app id and
+  device list for the target you're building.
 - `monkey.jungle` - build configuration.
 - `source/AnalogSimpleApp.mc` - application entry point.
 - `source/AnalogSimpleView.mc` - watch face drawing logic.
+- `source/RainService.mc` - background Open-Meteo fetch; caches the hourly
+  rain, cloud and temperature series to `Application.Storage`.
+- `source/RainServiceDelegate.mc` - background service entry point.
 - `resources/settings/` - user-configurable properties (`properties.xml`)
   and the settings UI shown in Garmin Connect/Express (`settings.xml`).
 - `resources/strings/` - localized strings.
@@ -99,15 +106,24 @@ app after installing the watch face:
 ## Building
 
 Requires the [Connect IQ SDK](https://developer.garmin.com/connect-iq/sdk/)
-and a developer key. From this directory:
+and a developer key, plus the Venu 4 device profiles installed through the
+SDK Manager (a fresh SDK ships with none, and a missing profile fails the
+build with `Invalid device id specified`).
+
+Stamp the manifest for your target, then build:
 
 ```sh
-monkeyc -f monkey.jungle -d venu441mm -o bin/analog-simple.prg -y developer_key
+scripts/set-manifest.sh beta
+monkeyc -f monkey.jungle -d venu445mm -o bin/analog-simple.prg -y developer_key
 ```
 
 Then run it in the simulator:
 
 ```sh
 connectiq
-monkeydo bin/analog-simple.prg venu441mm
+monkeydo bin/analog-simple.prg venu445mm
 ```
+
+A fresh simulator has no cached forecast, so the rain, cloud and temperature
+layers all draw nothing until you seed them — use **File → Edit Persistent
+Storage**, or trigger a fetch with **Simulation → Background Events**.
