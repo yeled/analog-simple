@@ -17,33 +17,48 @@ const HAND_STYLE_ROUNDED = 3;
 const RING_SOURCE_BODY_BATTERY = 0;
 const RING_SOURCE_WATCH_BATTERY = 1;
 
+// Outer edge of the rain gutter — the rim, i.e. the "horizon". The spark
+// comb hangs from the same radius so the two share one clean outer line.
+const RAIN_OUTER = 0.995;
+
 // Temperature trace styles (see resources/settings/settings.xml)
 const TEMP_STYLE_LINE = 0;
 const TEMP_STYLE_BARS = 1;
 
-// The temperature trace sits inside all three cloud bands (0.78 / 0.64 /
-// 0.50 R) so the weather layers can grow as thick as they like without ever
-// crowding it. The ceiling is the high cloud band: centred on 0.50 R with a
-// half-width up to 0.065 R (see drawCloudBand), its inner edge reaches
-// 0.435 R at full coverage. Both styles top out at 0.425 R, just clear of
-// that — keep it that way if you retune any of these.
+// The temperature reads on two independent channels, which answer two
+// different questions and so can't contradict each other:
 //
-// Hairline: a curve centred on TEMP_RADIUS, deviating by up to TEMP_AMP.
-const TEMP_RADIUS = 0.355;     // fraction of _radius the line centres on
-const TEMP_AMP = 0.07;         // peak deviation, in fractions of _radius
-// Spark bars: radial spokes rising from a common baseline at TEMP_BAR_BASE.
-// The coldest sample still gets a TEMP_BAR_MIN stub so the ring reads as a
-// continuous chart rather than trailing off into nothing.
-const TEMP_BAR_BASE = 0.285;   // inner baseline, fractions of _radius
-const TEMP_BAR_MIN = 0.018;    // spoke length at the coldest sample
-const TEMP_BAR_MAX = 0.14;     // spoke length at the warmest sample
+//   LENGTH  — adaptive. The day's own range fills the comb, so the shape of
+//             the day is always legible. Floored at TEMP_MIN_SPAN so a
+//             tropical 28-29 °C day isn't stretched into a wild swing.
+//   COLOUR  — absolute. The same temperature is always the same colour, so a
+//             glance separates frost from a heatwave without reading a
+//             number. Out-of-range days just saturate at the ends; because
+//             colour no longer drives length, that costs no shape.
+//
+// Spark bars hang inward from the rim, sharing the annulus with the rain
+// gutter. The hairline is the older, inner treatment and is kept as an
+// option.
+const TEMP_RADIUS = 0.355;     // hairline: fraction of _radius it centres on
+const TEMP_AMP = 0.07;         // hairline: peak deviation, same units
+const TEMP_BAR_BASE = 0.995;   // comb baseline — the rim; bars grow inward
+const TEMP_BAR_MIN = 0.05;     // spoke length at the day's coldest hour
+const TEMP_BAR_MAX = 0.32;     // spoke length at the day's warmest hour
 const TEMP_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
-const TEMP_MIN_SPAN = 8.0;     // °C mapped across the full amplitude, minimum
-const TEMP_COLD = 0x4A2A18;    // dim ember — coldest hour
-const TEMP_MID = 0xE8B84B;     // amber — mid range
-const TEMP_HOT = 0xFFF0C4;     // near-white — warmest hour
-const TEMP_HOT_MARK = 0xFFE9A8;
-const TEMP_COLD_MARK = 0x9C8FB5;
+const TEMP_RAIL_LEN = 0.13;    // dim hour rails that replace the tick marks
+const TEMP_BADGE_R = 0.085;    // high/low badge disc radius
+const TEMP_BADGE_GAP = 0.105;  // badge centre, inboard of the spoke tip
+const TEMP_MIN_SPAN = 10.0;    // °C across the full length, minimum
+// The date box spans 0.495-0.745 R around 3 o'clock; a warm afternoon would
+// otherwise drive spokes straight through it, so they stop short across that
+// sector. Bounds are in hours clockwise from 12.
+const TEMP_BOX_KEEPOUT = 0.80;
+const TEMP_BOX_FROM = 2.5;
+const TEMP_BOX_TO = 3.5;
+// Absolute colour scale, in °C.
+const TEMP_COLOR_MIN = -10.0;
+const TEMP_COLOR_MAX = 40.0;
+const TEMP_INK = 0xF1F3F4;     // badge text — never the data colour
 
 class AnalogSimpleView extends WatchUi.WatchFace {
 
@@ -422,7 +437,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = hourly.size() < 13 ? hourly.size() : 13;
         var maxMm = 4.0;
-        var outerRadius = _radius * 0.97;
+        var outerRadius = RAIN_OUTER * _radius;
         var maxDepth = _radius * 0.18;   // shallower than the awake band
 
         var inner = new [n];
@@ -468,8 +483,15 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         WatchUi.requestUpdate();
     }
 
-    //! Draw the 12 hour tick marks around the bezel
+    //! Draw the 12 hour tick marks around the bezel. When the spark comb is
+    //! up it owns that annulus, so the ticks give way to hour rails instead
+    //! of fighting it for the same pixels.
     function drawTicks(dc) {
+        if (_showTemp && _tempStyle == TEMP_STYLE_BARS && _isAwake) {
+            drawHourRails(dc);
+            return;
+        }
+
         dc.setColor(_tickColor, Graphics.COLOR_TRANSPARENT);
 
         for (var i = 0; i < 12; i++) {
@@ -489,6 +511,24 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
+    //! Twelve dim spokes at the hour positions, drawn under the comb. With
+    //! the ticks gone these are what keeps the hours findable; they sit at
+    //! the same radius as the comb and stay dark enough that the temperature
+    //! reads on top of them rather than through them.
+    private function drawHourRails(dc) {
+        var outer = TEMP_BAR_BASE * _radius;
+        var inner = (TEMP_BAR_BASE - TEMP_RAIL_LEN) * _radius;
+
+        dc.setColor(lerpColor(_tickColor, _bgColor, 0.45), Graphics.COLOR_TRANSPARENT);
+        for (var i = 0; i < 12; i++) {
+            var sin = _tickSin[i];
+            var cos = _tickCos[i];
+            dc.setPenWidth((i % 3 == 0) ? 7 : 5);
+            dc.drawLine(_centerX + outer * sin, _centerY - outer * cos,
+                        _centerX + inner * sin, _centerY - inner * cos);
+        }
+    }
+
     //! Draw the next 12 hours of rain *amount* (mm) as a solid blue ribbon
     //! just inside the bezel: a continuous band whose inner edge pulls inward
     //! with the hourly precipitation amount (a thin ring when dry, a deep
@@ -504,7 +544,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = hourly.size() < 13 ? hourly.size() : 13;
         var maxMm = 4.0;                  // mm/hr that maps to the deepest band
-        var outerRadius = _radius * 0.97; // hug the rim (the "horizon")
+        var outerRadius = RAIN_OUTER * _radius;
         var maxDepth = _radius * 0.30;    // exaggerated: 4mm+ reads as heavy
 
         // Inner-edge radius for each hour. Depth is 0 (nothing drawn) for a
@@ -717,14 +757,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5 * stormFraction);
     }
 
-    //! Draw the next 12 hours of air temperature inside the cloud bands, in
-    //! whichever style is configured. Either way the *distance from the
-    //! baseline* carries the temperature (warmer = further out) and the
-    //! *colour* warms along the same scale, from a dim ember through amber to
-    //! near-white. Both ends of the ramp stay in the warm half of the spectrum
-    //! on purpose — nothing here can be mistaken for the blue rain ribbon at
-    //! the rim. 12 o'clock is the soonest hour, clockwise, matching the rain
-    //! and cloud bands.
+    //! Draw the next 12 hours of air temperature in whichever style is
+    //! configured. 12 o'clock is the soonest hour, clockwise, matching the
+    //! rain and cloud bands. See the constants at the top of the file for how
+    //! length and colour split the work between them.
     function drawTemperature(dc) {
         var vals = temperatureSeries();
         if (vals == null) {
@@ -735,6 +771,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var span = tempSpan(vals);
 
         if (_tempStyle == TEMP_STYLE_BARS) {
+            drawFreezeArc(dc, vals, mid, span);
             drawTempBars(dc, vals, mid, span);
         } else {
             drawTempLine(dc, vals, mid, span);
@@ -745,8 +782,29 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
+    //! A faint ring at whatever radius 0 °C lands on today, drawn only when
+    //! the forecast actually crosses freezing. On an adaptive length scale a
+    //! fixed radius means nothing in particular, so a permanent gridline
+    //! would be a lie — but "the frost line, on the days there is one" is
+    //! both honest and the only threshold on this scale anyone acts on.
+    private function drawFreezeArc(dc, vals, mid, span) {
+        var lo = vals[0];
+        var hi = vals[0];
+        for (var i = 1; i < vals.size(); i++) {
+            if (vals[i] < lo) { lo = vals[i]; }
+            if (vals[i] > hi) { hi = vals[i]; }
+        }
+        if (lo > 0.0 || hi < 0.0) {
+            return;
+        }
+
+        dc.setPenWidth(1);
+        dc.setColor(dimColor(0x5A6B7A), Graphics.COLOR_TRANSPARENT);
+        dc.drawCircle(_centerX, _centerY, tempRadiusAt(tempFraction(0.0, mid, span)));
+    }
+
     //! Temperature as a circular spark chart: one radial spoke per minute mark
-    //! around the dial, rising from a common baseline. The 12 hours of hourly
+    //! around the dial, hanging inward from the rim. The 12 hours of hourly
     //! forecast are resampled to TEMP_BAR_COUNT positions (five spokes an
     //! hour) through the same Catmull-Rom curve the hairline uses, so the
     //! envelope stays smooth while the individual spokes give it the ticked,
@@ -760,6 +818,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         dc.setPenWidth(penWidth);
 
         var base = TEMP_BAR_BASE * _radius;
+        var keepout = TEMP_BOX_KEEPOUT * _radius;
         for (var b = 0; b < TEMP_BAR_COUNT; b++) {
             // Position in the hourly series, in hours ahead of now. Clamped so
             // a short series (fewer than 13 samples) repeats its last value
@@ -773,13 +832,16 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 i = n - 2;
             }
 
-            var t = tempFraction(catmullAt(vals, i, pos - i), mid, span);
-            var r = tempRadiusAt(t);
+            var v = catmullAt(vals, i, pos - i);
+            var r = tempRadiusAt(tempFraction(v, mid, span));
+            if (pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
+                r = keepout;   // stop short of the date box
+            }
             var ang = b * Math.PI / (TEMP_BAR_COUNT / 2.0);
             var sin = Math.sin(ang);
             var cos = Math.cos(ang);
 
-            dc.setColor(dimColor(tempRamp(t)), Graphics.COLOR_TRANSPARENT);
+            dc.setColor(dimColor(tempRamp(tempColorFraction(v))), Graphics.COLOR_TRANSPARENT);
             dc.drawLine(_centerX + base * sin, _centerY - base * cos,
                         _centerX + r * sin, _centerY - r * cos);
         }
@@ -806,14 +868,15 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                     continue;   // next segment's s==0 covers this point
                 }
                 var t = s * 1.0 / sub;
-                var frac = tempFraction(catmullAt(vals, i, t), mid, span);
-                var r = tempRadiusAt(frac);
+                var v = catmullAt(vals, i, t);
+                var r = tempRadiusAt(tempFraction(v, mid, span));
                 var ang = (i + t) * Math.PI / 6.0;
                 var x = _centerX + r * Math.sin(ang);
                 var y = _centerY - r * Math.cos(ang);
 
                 if (prevX != null) {
-                    dc.setColor(dimColor(tempRamp(frac)), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(dimColor(tempRamp(tempColorFraction(v))),
+                                Graphics.COLOR_TRANSPARENT);
                     dc.drawLine(prevX, prevY, x, y);
                 }
                 prevX = x;
@@ -822,8 +885,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
-    //! Where a temperature sits on the day's own scale, 0.0 (coldest) to 1.0
-    //! (warmest). Drives both the radius and the colour ramp.
+    //! Where a temperature sits on *the day's own* scale, 0.0 (coldest hour)
+    //! to 1.0 (warmest). Drives length only — see tempColorFraction for the
+    //! absolute scale that drives colour.
     private function tempFraction(v, mid, span) {
         var t = (v - mid) / span + 0.5;
         if (t < 0.0) {
@@ -834,22 +898,40 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return t;
     }
 
-    //! Radius the trace reaches for a scale fraction `t` — the hairline's
-    //! centre line, or the tip of a spark bar.
+    //! Where a temperature sits on the *absolute* scale, 0.0 at
+    //! TEMP_COLOR_MIN to 1.0 at TEMP_COLOR_MAX. Drives colour only. Days
+    //! outside the band clamp to the end colours, which costs nothing —
+    //! length still carries the shape.
+    private function tempColorFraction(v) {
+        var t = (v - TEMP_COLOR_MIN) / (TEMP_COLOR_MAX - TEMP_COLOR_MIN);
+        if (t < 0.0) {
+            t = 0.0;
+        } else if (t > 1.0) {
+            t = 1.0;
+        }
+        return t;
+    }
+
+    //! Radius the trace reaches for a length fraction `t` — the hairline's
+    //! centre line, or the inward tip of a spark bar.
     private function tempRadiusAt(t) {
         if (_tempStyle == TEMP_STYLE_BARS) {
-            return (TEMP_BAR_BASE + TEMP_BAR_MIN
-                + (TEMP_BAR_MAX - TEMP_BAR_MIN) * t) * _radius;
+            return (TEMP_BAR_BASE - TEMP_BAR_MIN
+                - (TEMP_BAR_MAX - TEMP_BAR_MIN) * t) * _radius;
         }
         return (TEMP_RADIUS + (t - 0.5) * 2.0 * TEMP_AMP) * _radius;
     }
 
-    //! Work out where the warmest and coldest hour's notch and label go, as
-    //! [x, y, labelX, labelY, colour, text] per mark. This is computed with
-    //! the rest of the static layer but *drawn* after the hands — the labels
-    //! sit around 0.24 R, in the crush where the hands converge, so anything
-    //! left in the static buffer gets blitted over. There is no radial
-    //! position that avoids the hands; drawing on top is the only fix.
+    //! Work out where the warmest and coldest hour's badge goes, as
+    //! [x, y, ringColour, text] per mark. Computed with the rest of the
+    //! static layer but *drawn* after the hands: the badges sit inboard of
+    //! the comb where the hands sweep, so anything left in the static buffer
+    //! gets blitted over.
+    //!
+    //! The ring takes the colour of its own value off the absolute ramp, so
+    //! the badge agrees with the spoke it belongs to. That only works because
+    //! the ramp's cold end is ice-white — on the old warm-only ramp a low of
+    //! 2 °C came out near-black and the badge vanished into the face.
     function computeTempMarks(dc, vals, mid, span) {
         var loIndex = 0;
         var hiIndex = 0;
@@ -858,64 +940,50 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             if (vals[i] > vals[hiIndex]) { hiIndex = i; }
         }
 
-        var source = [[hiIndex, TEMP_HOT_MARK], [loIndex, TEMP_COLD_MARK]];
+        var source = [hiIndex, loIndex];
         var marks = new [source.size()];
-        var half = _radius * 0.035;
+        var keepout = TEMP_BOX_KEEPOUT * _radius;
         for (var m = 0; m < source.size(); m++) {
-            var i = source[m][0];
+            var i = source[m];
             var v = vals[i];
+            var pos = i * 1.0;
             var r = tempRadiusAt(tempFraction(v, mid, span));
-            // The hairline gets a notch straddling it. A spark bar can't take
-            // one: the warmest bar already reaches the 0.425 R ceiling, so an
-            // outward notch would poke into the high cloud band. Cap the top
-            // of the spoke instead.
-            var rOuter = (_tempStyle == TEMP_STYLE_BARS) ? r : r + half;
-            var rInner = rOuter - 2.0 * half;
+            if (_tempStyle == TEMP_STYLE_BARS
+                    && pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
+                r = keepout;   // follow the spoke that was clipped short
+            }
+            // Inboard of the trace either way: the comb hangs inward from the
+            // rim, the hairline sits inside the cloud bands.
+            var br = r - TEMP_BADGE_GAP * _radius;
             var ang = i * Math.PI / 6.0;
-            var sin = Math.sin(ang);
-            var cos = Math.cos(ang);
-            // Label sits inward of the notch, in the middle of the dial —
-            // well clear of the battery box, which starts at 0.495 R.
-            var lr = r - _radius * 0.12;
             marks[m] = [
-                _centerX + rInner * sin, _centerY - rInner * cos,
-                _centerX + rOuter * sin, _centerY - rOuter * cos,
-                _centerX + lr * sin, _centerY - lr * cos,
-                dimColor(source[m][1]), formatTemp(v)
+                _centerX + br * Math.sin(ang), _centerY - br * Math.cos(ang),
+                dimColor(tempRamp(tempColorFraction(v))), formatTemp(v)
             ];
         }
         separateLabels(dc, marks);
         return marks;
     }
 
-    //! Nudge the two labels apart when their text boxes overlap. Both are
-    //! pulled the same distance inward from their own hour, so when the
-    //! warmest and coldest hours fall close together on the dial the labels
-    //! land on top of each other: the further in they sit, the less room the
-    //! same angular gap buys. Resolve along whichever axis needs the smaller
-    //! push, so a side-by-side pair separates horizontally and a stacked one
-    //! vertically. The notches stay where the data put them — the shared
-    //! colour is what ties a moved label back to its notch.
+    //! Nudge the two badges apart when they overlap. Both are pulled the same
+    //! distance inboard from their own hour, so when the warmest and coldest
+    //! hours fall close together on the dial the discs land on top of each
+    //! other. Resolve along whichever axis needs the smaller push, so a
+    //! side-by-side pair separates horizontally and a stacked one vertically.
     private function separateLabels(dc, marks) {
         if (marks.size() < 2) {
             return;
         }
         var a = marks[0];
         var b = marks[1];
-        var pad = 2;
-        var font = Graphics.FONT_XTINY;
-        // Half-widths sum for the x axis; one full line height covers the two
-        // half-heights on the y axis.
-        var needX = (dc.getTextWidthInPixels(a[7], font)
-                   + dc.getTextWidthInPixels(b[7], font)) / 2.0 + pad;
-        var needY = dc.getFontHeight(font) + pad;
+        var need = 2.0 * TEMP_BADGE_R * _radius + 3;   // two discs plus a gap
 
-        var dx = b[4] - a[4];
-        var dy = b[5] - a[5];
-        var overlapX = needX - (dx < 0 ? -dx : dx);
-        var overlapY = needY - (dy < 0 ? -dy : dy);
+        var dx = b[0] - a[0];
+        var dy = b[1] - a[1];
+        var overlapX = need - (dx < 0 ? -dx : dx);
+        var overlapY = need - (dy < 0 ? -dy : dy);
         if (overlapX <= 0 || overlapY <= 0) {
-            return;      // boxes already clear of each other
+            return;      // already clear of each other
         }
 
         var push;
@@ -923,32 +991,33 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         if (overlapY <= overlapX) {
             push = overlapY / 2.0;
             dir = (dy < 0) ? -1 : 1;
-            a[5] -= dir * push;
-            b[5] += dir * push;
+            a[1] -= dir * push;
+            b[1] += dir * push;
         } else {
             push = overlapX / 2.0;
             dir = (dx < 0) ? -1 : 1;
-            a[4] -= dir * push;
-            b[4] += dir * push;
+            a[0] -= dir * push;
+            b[0] += dir * push;
         }
     }
 
-    //! Draw the cached extreme markers over the top of the hands. Each label
-    //! gets a one-pixel background-coloured shadow first: the hands are white
-    //! and the warm label is pale, so without it the text dissolves wherever
-    //! the two cross.
+    //! Draw the cached high/low badges over the top of the hands. Each is a
+    //! background-filled disc so it stays legible wherever it lands — over a
+    //! cloud band, the rain gutter or a hand — with the ring carrying the
+    //! temperature colour and the number in plain light ink. Text never wears
+    //! the data colour: at the ends of the ramp it would be unreadable.
     function drawTempExtremes(dc) {
-        dc.setPenWidth(3);
+        var br = (TEMP_BADGE_R * _radius).toNumber();
+        var justify = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
         for (var m = 0; m < _tempMarks.size(); m++) {
             var mark = _tempMarks[m];
-            dc.setColor(mark[6], Graphics.COLOR_TRANSPARENT);
-            dc.drawLine(mark[0], mark[1], mark[2], mark[3]);
-
-            var justify = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
             dc.setColor(_bgColor, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(mark[4] + 1, mark[5] + 1, Graphics.FONT_XTINY, mark[7], justify);
-            dc.setColor(mark[6], Graphics.COLOR_TRANSPARENT);
-            dc.drawText(mark[4], mark[5], Graphics.FONT_XTINY, mark[7], justify);
+            dc.fillCircle(mark[0], mark[1], br);
+            dc.setPenWidth(3);
+            dc.setColor(mark[2], Graphics.COLOR_TRANSPARENT);
+            dc.drawCircle(mark[0], mark[1], br);
+            dc.setColor(dimColor(TEMP_INK), Graphics.COLOR_TRANSPARENT);
+            dc.drawText(mark[0], mark[1], Graphics.FONT_XTINY, mark[3], justify);
         }
     }
 
@@ -1030,14 +1099,27 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t * t * t);
     }
 
-    //! Warm-only temperature ramp: dim ember (coldest) through amber to
-    //! near-white (warmest). Deliberately never enters the blues.
+    //! Absolute temperature ramp: ice white through sand and orange to a hot
+    //! red, following the convention everyone already knows from taps and
+    //! weather maps. It runs the *opposite* way to brightness-as-magnitude,
+    //! which is fine because bar length carries magnitude unambiguously —
+    //! that frees colour to say hot or cold instead of repeating it.
+    //!
+    //! The cool end is desaturated on purpose. A saturated blue would read as
+    //! the rain gutter, which shares this annulus once the comb hangs from
+    //! the rim.
     function tempRamp(t) {
         if (t < 0.0) { t = 0.0; } else if (t > 1.0) { t = 1.0; }
-        if (t < 0.5) {
-            return lerpColor(TEMP_COLD, TEMP_MID, t * 2.0);
+        if (t < 0.22) {
+            return lerpColor(0xEDF4FB, 0xC3D2DE, t / 0.22);
         }
-        return lerpColor(TEMP_MID, TEMP_HOT, (t - 0.5) * 2.0);
+        if (t < 0.45) {
+            return lerpColor(0xC3D2DE, 0xF0C46A, (t - 0.22) / 0.23);
+        }
+        if (t < 0.72) {
+            return lerpColor(0xF0C46A, 0xFF9142, (t - 0.45) / 0.27);
+        }
+        return lerpColor(0xFF9142, 0xF4472C, (t - 0.72) / 0.28);
     }
 
     //! Format a °C value for display in the watch's configured units.
