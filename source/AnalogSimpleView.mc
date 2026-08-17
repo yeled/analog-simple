@@ -741,7 +741,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
 
         if (_tempExtremes) {
-            _tempMarks = computeTempMarks(vals, mid, span);
+            _tempMarks = computeTempMarks(dc, vals, mid, span);
         }
     }
 
@@ -850,7 +850,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! sit around 0.24 R, in the crush where the hands converge, so anything
     //! left in the static buffer gets blitted over. There is no radial
     //! position that avoids the hands; drawing on top is the only fix.
-    function computeTempMarks(vals, mid, span) {
+    function computeTempMarks(dc, vals, mid, span) {
         var loIndex = 0;
         var hiIndex = 0;
         for (var i = 1; i < vals.size(); i++) {
@@ -884,7 +884,53 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 dimColor(source[m][1]), formatTemp(v)
             ];
         }
+        separateLabels(dc, marks);
         return marks;
+    }
+
+    //! Nudge the two labels apart when their text boxes overlap. Both are
+    //! pulled the same distance inward from their own hour, so when the
+    //! warmest and coldest hours fall close together on the dial the labels
+    //! land on top of each other: the further in they sit, the less room the
+    //! same angular gap buys. Resolve along whichever axis needs the smaller
+    //! push, so a side-by-side pair separates horizontally and a stacked one
+    //! vertically. The notches stay where the data put them — the shared
+    //! colour is what ties a moved label back to its notch.
+    private function separateLabels(dc, marks) {
+        if (marks.size() < 2) {
+            return;
+        }
+        var a = marks[0];
+        var b = marks[1];
+        var pad = 2;
+        var font = Graphics.FONT_XTINY;
+        // Half-widths sum for the x axis; one full line height covers the two
+        // half-heights on the y axis.
+        var needX = (dc.getTextWidthInPixels(a[7], font)
+                   + dc.getTextWidthInPixels(b[7], font)) / 2.0 + pad;
+        var needY = dc.getFontHeight(font) + pad;
+
+        var dx = b[4] - a[4];
+        var dy = b[5] - a[5];
+        var overlapX = needX - (dx < 0 ? -dx : dx);
+        var overlapY = needY - (dy < 0 ? -dy : dy);
+        if (overlapX <= 0 || overlapY <= 0) {
+            return;      // boxes already clear of each other
+        }
+
+        var push;
+        var dir;
+        if (overlapY <= overlapX) {
+            push = overlapY / 2.0;
+            dir = (dy < 0) ? -1 : 1;
+            a[5] -= dir * push;
+            b[5] += dir * push;
+        } else {
+            push = overlapX / 2.0;
+            dir = (dx < 0) ? -1 : 1;
+            a[4] -= dir * push;
+            b[4] += dir * push;
+        }
     }
 
     //! Draw the cached extreme markers over the top of the hands. Each label
