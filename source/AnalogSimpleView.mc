@@ -17,15 +17,27 @@ const HAND_STYLE_ROUNDED = 3;
 const RING_SOURCE_BODY_BATTERY = 0;
 const RING_SOURCE_WATCH_BATTERY = 1;
 
-// Temperature hairline. It sits inside all three cloud bands (0.78 / 0.64 /
+// Temperature trace styles (see resources/settings/settings.xml)
+const TEMP_STYLE_LINE = 0;
+const TEMP_STYLE_BARS = 1;
+
+// The temperature trace sits inside all three cloud bands (0.78 / 0.64 /
 // 0.50 R) so the weather layers can grow as thick as they like without ever
 // crowding it. The ceiling is the high cloud band: centred on 0.50 R with a
 // half-width up to 0.065 R (see drawCloudBand), its inner edge reaches
-// 0.435 R at full coverage. The line's warmest excursion is
-// TEMP_RADIUS + TEMP_AMP = 0.425 R, which stays just clear of that — keep
-// the sum under 0.435 if you retune these.
+// 0.435 R at full coverage. Both styles top out at 0.425 R, just clear of
+// that — keep it that way if you retune any of these.
+//
+// Hairline: a curve centred on TEMP_RADIUS, deviating by up to TEMP_AMP.
 const TEMP_RADIUS = 0.355;     // fraction of _radius the line centres on
 const TEMP_AMP = 0.07;         // peak deviation, in fractions of _radius
+// Spark bars: radial spokes rising from a common baseline at TEMP_BAR_BASE.
+// The coldest sample still gets a TEMP_BAR_MIN stub so the ring reads as a
+// continuous chart rather than trailing off into nothing.
+const TEMP_BAR_BASE = 0.285;   // inner baseline, fractions of _radius
+const TEMP_BAR_MIN = 0.018;    // spoke length at the coldest sample
+const TEMP_BAR_MAX = 0.14;     // spoke length at the warmest sample
+const TEMP_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
 const TEMP_MIN_SPAN = 8.0;     // °C mapped across the full amplitude, minimum
 const TEMP_COLD = 0x4A2A18;    // dim ember — coldest hour
 const TEMP_MID = 0xE8B84B;     // amber — mid range
@@ -64,6 +76,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _showCloud = true;
     private var _cloudRipple = true;
     private var _showTemp = true;
+    private var _tempStyle = TEMP_STYLE_BARS;
     private var _tempExtremes = false;
     private var _weatherInAOD = false;
     private var _ringSource = RING_SOURCE_BODY_BATTERY;
@@ -140,6 +153,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         _showCloud      = getBooleanProperty("ShowCloudCover", true);
         _cloudRipple    = getBooleanProperty("CloudCoverRipple", true);
         _showTemp       = getBooleanProperty("ShowTemperature", true);
+        _tempStyle      = getNumberProperty("TempStyle", TEMP_STYLE_BARS);
         _tempExtremes   = getBooleanProperty("ShowTempExtremes", false);
         _weatherInAOD   = getBooleanProperty("ShowWeatherInAOD", false);
         _ringSource     = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
@@ -703,13 +717,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5 * stormFraction);
     }
 
-    //! Draw the next 12 hours of air temperature as a hairline inside the
-    //! cloud bands: the line's *radius* carries the temperature (warmer =
-    //! further out) and its *colour* warms along the same scale, from a dim
-    //! ember through amber to near-white. Both ends of the ramp stay in the
-    //! warm half of the spectrum on purpose — nothing on this line can be
-    //! mistaken for the blue rain ribbon at the rim. 12 o'clock is the
-    //! soonest hour, clockwise, matching the rain and cloud bands.
+    //! Draw the next 12 hours of air temperature inside the cloud bands, in
+    //! whichever style is configured. Either way the *distance from the
+    //! baseline* carries the temperature (warmer = further out) and the
+    //! *colour* warms along the same scale, from a dim ember through amber to
+    //! near-white. Both ends of the ramp stay in the warm half of the spectrum
+    //! on purpose — nothing here can be mistaken for the blue rain ribbon at
+    //! the rim. 12 o'clock is the soonest hour, clockwise, matching the rain
+    //! and cloud bands.
     function drawTemperature(dc) {
         var vals = temperatureSeries();
         if (vals == null) {
@@ -719,6 +734,60 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var mid = tempMid(vals);
         var span = tempSpan(vals);
 
+        if (_tempStyle == TEMP_STYLE_BARS) {
+            drawTempBars(dc, vals, mid, span);
+        } else {
+            drawTempLine(dc, vals, mid, span);
+        }
+
+        if (_tempExtremes) {
+            _tempMarks = computeTempMarks(vals, mid, span);
+        }
+    }
+
+    //! Temperature as a circular spark chart: one radial spoke per minute mark
+    //! around the dial, rising from a common baseline. The 12 hours of hourly
+    //! forecast are resampled to TEMP_BAR_COUNT positions (five spokes an
+    //! hour) through the same Catmull-Rom curve the hairline uses, so the
+    //! envelope stays smooth while the individual spokes give it the ticked,
+    //! chart-like read of a sparkline.
+    private function drawTempBars(dc, vals, mid, span) {
+        var n = vals.size();
+        var penWidth = (_radius * 0.016).toNumber();
+        if (penWidth < 2) {
+            penWidth = 2;
+        }
+        dc.setPenWidth(penWidth);
+
+        var base = TEMP_BAR_BASE * _radius;
+        for (var b = 0; b < TEMP_BAR_COUNT; b++) {
+            // Position in the hourly series, in hours ahead of now. Clamped so
+            // a short series (fewer than 13 samples) repeats its last value
+            // rather than extrapolating off the end of the curve.
+            var pos = b * 12.0 / TEMP_BAR_COUNT;
+            if (pos > n - 1) {
+                pos = n - 1;
+            }
+            var i = pos.toNumber();
+            if (i > n - 2) {
+                i = n - 2;
+            }
+
+            var t = tempFraction(catmullAt(vals, i, pos - i), mid, span);
+            var r = tempRadiusAt(t);
+            var ang = b * Math.PI / (TEMP_BAR_COUNT / 2.0);
+            var sin = Math.sin(ang);
+            var cos = Math.cos(ang);
+
+            dc.setColor(dimColor(tempRamp(t)), Graphics.COLOR_TRANSPARENT);
+            dc.drawLine(_centerX + base * sin, _centerY - base * cos,
+                        _centerX + r * sin, _centerY - r * cos);
+        }
+    }
+
+    //! Temperature as a single continuous hairline whose radius rises and
+    //! falls with the value.
+    private function drawTempLine(dc, vals, mid, span) {
         var penWidth = (_radius * 0.014).toNumber();
         if (penWidth < 2) {
             penWidth = 2;
@@ -737,25 +806,42 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                     continue;   // next segment's s==0 covers this point
                 }
                 var t = s * 1.0 / sub;
-                var v = catmullAt(vals, i, t);
-                var frac = (v - mid) / span;      // -0.5 .. 0.5
-                var r = TEMP_RADIUS * _radius + frac * 2.0 * TEMP_AMP * _radius;
+                var frac = tempFraction(catmullAt(vals, i, t), mid, span);
+                var r = tempRadiusAt(frac);
                 var ang = (i + t) * Math.PI / 6.0;
                 var x = _centerX + r * Math.sin(ang);
                 var y = _centerY - r * Math.cos(ang);
 
                 if (prevX != null) {
-                    dc.setColor(dimColor(tempRamp(frac + 0.5)), Graphics.COLOR_TRANSPARENT);
+                    dc.setColor(dimColor(tempRamp(frac)), Graphics.COLOR_TRANSPARENT);
                     dc.drawLine(prevX, prevY, x, y);
                 }
                 prevX = x;
                 prevY = y;
             }
         }
+    }
 
-        if (_tempExtremes) {
-            _tempMarks = computeTempMarks(vals, mid, span);
+    //! Where a temperature sits on the day's own scale, 0.0 (coldest) to 1.0
+    //! (warmest). Drives both the radius and the colour ramp.
+    private function tempFraction(v, mid, span) {
+        var t = (v - mid) / span + 0.5;
+        if (t < 0.0) {
+            t = 0.0;
+        } else if (t > 1.0) {
+            t = 1.0;
         }
+        return t;
+    }
+
+    //! Radius the trace reaches for a scale fraction `t` — the hairline's
+    //! centre line, or the tip of a spark bar.
+    private function tempRadiusAt(t) {
+        if (_tempStyle == TEMP_STYLE_BARS) {
+            return (TEMP_BAR_BASE + TEMP_BAR_MIN
+                + (TEMP_BAR_MAX - TEMP_BAR_MIN) * t) * _radius;
+        }
+        return (TEMP_RADIUS + (t - 0.5) * 2.0 * TEMP_AMP) * _radius;
     }
 
     //! Work out where the warmest and coldest hour's notch and label go, as
@@ -778,7 +864,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         for (var m = 0; m < source.size(); m++) {
             var i = source[m][0];
             var v = vals[i];
-            var r = TEMP_RADIUS * _radius + ((v - mid) / span) * 2.0 * TEMP_AMP * _radius;
+            var r = tempRadiusAt(tempFraction(v, mid, span));
+            // The hairline gets a notch straddling it. A spark bar can't take
+            // one: the warmest bar already reaches the 0.425 R ceiling, so an
+            // outward notch would poke into the high cloud band. Cap the top
+            // of the spoke instead.
+            var rOuter = (_tempStyle == TEMP_STYLE_BARS) ? r : r + half;
+            var rInner = rOuter - 2.0 * half;
             var ang = i * Math.PI / 6.0;
             var sin = Math.sin(ang);
             var cos = Math.cos(ang);
@@ -786,8 +878,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             // well clear of the battery box, which starts at 0.495 R.
             var lr = r - _radius * 0.12;
             marks[m] = [
-                _centerX + (r - half) * sin, _centerY - (r - half) * cos,
-                _centerX + (r + half) * sin, _centerY - (r + half) * cos,
+                _centerX + rInner * sin, _centerY - rInner * cos,
+                _centerX + rOuter * sin, _centerY - rOuter * cos,
                 _centerX + lr * sin, _centerY - lr * cos,
                 dimColor(source[m][1]), formatTemp(v)
             ];

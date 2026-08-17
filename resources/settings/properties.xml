@@ -17,6 +17,7 @@
     <property id="ShowCloudCover" type="boolean">true</property>
     <property id="CloudCoverRipple" type="boolean">true</property>
     <property id="ShowTemperature" type="boolean">true</property>
+    <property id="TempStyle" type="number">1</property>
     <property id="ShowTempExtremes" type="boolean">false</property>
     <property id="ShowWeatherInAOD" type="boolean">false</property>
     <property id="LocationOverride" type="string"></property>

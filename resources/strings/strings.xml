@@ -1,7 +1,7 @@
 <strings>
     <string id="AppName">Analog Simple</string>
     <!-- Bumped on every .iq (store) build; keep in sync with the git tag -->
-    <string id="AppVersion">1.2.1</string>
+    <string id="AppVersion">1.3.0</string>
 
     <!-- Setting titles -->
     <string id="HandStyleTitle">Hand Style</string>
@@ -18,10 +18,14 @@
     <string id="ShowCloudCoverPrompt">Show cloud cover as three grey lines (low, mid, high altitude) — higher cloud sits closer to the centre, and each line thickens with that layer's coverage.</string>
     <string id="CloudCoverRippleTitle">Cloud Color Ripple</string>
     <string id="CloudCoverRipplePrompt">Vary each cloud line's colour in waves along the ring instead of a flat tint. Turn off if it causes Always-On Display to shut off due to the extra drawing work.</string>
-    <string id="ShowTemperatureTitle">Temperature Line</string>
-    <string id="ShowTemperaturePrompt">Show the next 12 hours of temperature as a thin line inside the cloud bands. The line moves outward and brightens from ember to near-white as it gets warmer (12 o'clock = soonest hour, clockwise). The scale adapts to the day's own range.</string>
+    <string id="ShowTemperatureTitle">Temperature</string>
+    <string id="ShowTemperaturePrompt">Show the next 12 hours of temperature inside the cloud bands. It reaches outward and brightens from ember to near-white as it gets warmer (12 o'clock = soonest hour, clockwise). The scale adapts to the day's own range.</string>
+    <string id="TempStyleTitle">Temperature Style</string>
+    <string id="TempStylePrompt">Draw the temperature as a ring of spark bars — one spoke per minute mark, rising with the temperature — or as a single thin curve.</string>
+    <string id="TempStyleBars">Spark Bars</string>
+    <string id="TempStyleLine">Hairline Curve</string>
     <string id="ShowTempExtremesTitle">Temperature High / Low</string>
-    <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour on the temperature line with a short notch and the value.</string>
+    <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour on the temperature trace with a short notch and the value.</string>
     <string id="ShowWeatherInAODTitle">Weather in Always-On</string>
     <string id="ShowWeatherInAODPrompt">Keep showing the forecast while the screen is dimmed (always-on). To stay within the always-on power budget it draws a single lightweight cloud outline ring (thicker = cloudier) plus a thin rain outline, instead of the full bands. Leave off if always-on still switches off on your watch.</string>
     <string id="LocationOverrideTitle">Location Override</string>

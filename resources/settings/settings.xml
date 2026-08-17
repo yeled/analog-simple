@@ -57,6 +57,13 @@
         <settingConfig type="boolean" />
     </setting>
 
+    <setting propertyKey="@Properties.TempStyle" title="@Strings.TempStyleTitle" prompt="@Strings.TempStylePrompt">
+        <settingConfig type="list">
+            <listEntry value="1">@Strings.TempStyleBars</listEntry>
+            <listEntry value="0">@Strings.TempStyleLine</listEntry>
+        </settingConfig>
+    </setting>
+
     <setting propertyKey="@Properties.ShowTempExtremes" title="@Strings.ShowTempExtremesTitle" prompt="@Strings.ShowTempExtremesPrompt">
         <settingConfig type="boolean" />
     </setting>
