@@ -1,7 +1,7 @@
 <strings>
     <string id="AppName">Analog Simple</string>
     <!-- Bumped on every .iq (store) build; keep in sync with the git tag -->
-    <string id="AppVersion">1.4.0</string>
+    <string id="AppVersion">1.4.1</string>
 
     <!-- Setting titles -->
     <string id="HandStyleTitle">Hand Style</string>
@@ -21,8 +21,9 @@
     <string id="ShowTemperatureTitle">Temperature</string>
     <string id="ShowTemperaturePrompt">Show the next 12 hours of temperature (12 o'clock = soonest hour, clockwise). Colour is absolute — ice white when it's freezing through to red in a heatwave — while length follows the day's own range, so the shape of the day stays readable whatever the season. A faint ring marks freezing on the days the forecast crosses it.</string>
     <string id="TempStyleTitle">Temperature Style</string>
-    <string id="TempStylePrompt">Spark Bars draws a ring of spokes at the bezel, one per minute mark, hanging inward with the temperature; the hour ticks become dim rails beneath it. Hairline Curve is the older, quieter treatment: a single thin line inside the cloud bands.</string>
-    <string id="TempStyleBars">Spark Bars</string>
+    <string id="TempStylePrompt">Spark Bars (Rim) draws a ring of spokes at the bezel, one per minute mark, hanging inward with the temperature; the hour ticks become dim rails beneath it. Spark Bars (Inner) is the same comb mid-dial, growing outward inside the cloud bands, leaving the bezel to the rain. Hairline Curve is the oldest and quietest: a single thin line mid-dial.</string>
+    <string id="TempStyleBars">Spark Bars (Rim)</string>
+    <string id="TempStyleBarsInner">Spark Bars (Inner)</string>
     <string id="TempStyleLine">Hairline Curve</string>
     <string id="ShowTempExtremesTitle">Temperature High / Low</string>
     <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour with a small circled value, coloured to match that temperature.</string>

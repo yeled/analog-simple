@@ -24,6 +24,7 @@ const RAIN_OUTER = 0.995;
 // Temperature trace styles (see resources/settings/settings.xml)
 const TEMP_STYLE_LINE = 0;
 const TEMP_STYLE_BARS = 1;
+const TEMP_STYLE_BARS_INNER = 2;
 
 // The temperature reads on two independent channels, which answer two
 // different questions and so can't contradict each other:
@@ -37,13 +38,17 @@ const TEMP_STYLE_BARS = 1;
 //             colour no longer drives length, that costs no shape.
 //
 // Spark bars hang inward from the rim, sharing the annulus with the rain
-// gutter. The hairline is the older, inner treatment and is kept as an
-// option.
+// gutter. The inner comb is the older placement — the same spokes growing
+// outward from mid-dial, inside the cloud bands — and the hairline is older
+// still; both are kept as options.
 const TEMP_RADIUS = 0.355;     // hairline: fraction of _radius it centres on
 const TEMP_AMP = 0.07;         // hairline: peak deviation, same units
 const TEMP_BAR_BASE = 0.995;   // comb baseline — the rim; bars grow inward
 const TEMP_BAR_MIN = 0.05;     // spoke length at the day's coldest hour
 const TEMP_BAR_MAX = 0.32;     // spoke length at the day's warmest hour
+const TEMP_INNER_BASE = 0.285; // inner comb baseline; bars grow outward
+const TEMP_INNER_MIN = 0.018;  // inner comb: spoke length at the coldest hour
+const TEMP_INNER_MAX = 0.14;   // inner comb: spoke length at the warmest hour
 const TEMP_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
 const TEMP_RAIL_LEN = 0.13;    // dim hour rails that replace the tick marks
 const TEMP_BADGE_R = 0.085;    // high/low badge disc radius
@@ -770,11 +775,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var mid = tempMid(vals);
         var span = tempSpan(vals);
 
-        if (_tempStyle == TEMP_STYLE_BARS) {
+        if (_tempStyle == TEMP_STYLE_LINE) {
+            drawTempLine(dc, vals, mid, span);
+        } else {
             drawFreezeArc(dc, vals, mid, span);
             drawTempBars(dc, vals, mid, span);
-        } else {
-            drawTempLine(dc, vals, mid, span);
         }
 
         if (_tempExtremes) {
@@ -817,7 +822,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
         dc.setPenWidth(penWidth);
 
-        var base = TEMP_BAR_BASE * _radius;
+        var isRim = (_tempStyle == TEMP_STYLE_BARS);
+        var base = (isRim ? TEMP_BAR_BASE : TEMP_INNER_BASE) * _radius;
         var keepout = TEMP_BOX_KEEPOUT * _radius;
         for (var b = 0; b < TEMP_BAR_COUNT; b++) {
             // Position in the hourly series, in hours ahead of now. Clamped so
@@ -834,7 +840,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
             var v = catmullAt(vals, i, pos - i);
             var r = tempRadiusAt(tempFraction(v, mid, span));
-            if (pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
+            if (isRim && pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
                 r = keepout;   // stop short of the date box
             }
             var ang = b * Math.PI / (TEMP_BAR_COUNT / 2.0);
@@ -913,11 +919,15 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     }
 
     //! Radius the trace reaches for a length fraction `t` — the hairline's
-    //! centre line, or the inward tip of a spark bar.
+    //! centre line, or the free tip of a spark bar.
     private function tempRadiusAt(t) {
         if (_tempStyle == TEMP_STYLE_BARS) {
             return (TEMP_BAR_BASE - TEMP_BAR_MIN
                 - (TEMP_BAR_MAX - TEMP_BAR_MIN) * t) * _radius;
+        }
+        if (_tempStyle == TEMP_STYLE_BARS_INNER) {
+            return (TEMP_INNER_BASE + TEMP_INNER_MIN
+                + (TEMP_INNER_MAX - TEMP_INNER_MIN) * t) * _radius;
         }
         return (TEMP_RADIUS + (t - 0.5) * 2.0 * TEMP_AMP) * _radius;
     }
@@ -952,8 +962,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                     && pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
                 r = keepout;   // follow the spoke that was clipped short
             }
-            // Inboard of the trace either way: the comb hangs inward from the
-            // rim, the hairline sits inside the cloud bands.
+            // Inboard of the trace in every style — the rim comb hangs inward
+            // from the bezel, the inner comb and the hairline both sit
+            // mid-dial with the middle free.
             var br = r - TEMP_BADGE_GAP * _radius;
             var ang = i * Math.PI / 6.0;
             marks[m] = [
