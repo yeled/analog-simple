@@ -53,13 +53,16 @@
         <settingConfig type="boolean" />
     </setting>
 
+    <setting propertyKey="@Properties.ShowWind" title="@Strings.ShowWindTitle" prompt="@Strings.ShowWindPrompt">
+        <settingConfig type="boolean" />
+    </setting>
+
     <setting propertyKey="@Properties.ShowTemperature" title="@Strings.ShowTemperatureTitle" prompt="@Strings.ShowTemperaturePrompt">
         <settingConfig type="boolean" />
     </setting>
 
     <setting propertyKey="@Properties.TempStyle" title="@Strings.TempStyleTitle" prompt="@Strings.TempStylePrompt">
         <settingConfig type="list">
-            <listEntry value="1">@Strings.TempStyleBars</listEntry>
             <listEntry value="2">@Strings.TempStyleBarsInner</listEntry>
             <listEntry value="0">@Strings.TempStyleLine</listEntry>
         </settingConfig>

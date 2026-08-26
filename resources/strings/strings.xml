@@ -18,12 +18,13 @@
     <string id="ShowCloudCoverPrompt">Show cloud cover as three grey lines (low, mid, high altitude) — higher cloud sits closer to the centre, and each line thickens with that layer's coverage.</string>
     <string id="CloudCoverRippleTitle">Cloud Color Ripple</string>
     <string id="CloudCoverRipplePrompt">Vary each cloud line's colour in waves along the ring instead of a flat tint. Turn off if it causes Always-On Display to shut off due to the extra drawing work.</string>
+    <string id="ShowWindTitle">Wind</string>
+    <string id="ShowWindPrompt">Show the next 12 hours of wind as a comb of spokes hanging in from the bezel, one per minute mark (12 o'clock = soonest hour, clockwise). Length follows the sustained speed on a fixed scale — a calm day stays a bare rim — while colour follows the gusts, from still grey through green and teal to a storm violet. The hour ticks become dim rails beneath it.</string>
     <string id="ShowTemperatureTitle">Temperature</string>
     <string id="ShowTemperaturePrompt">Show the next 12 hours of temperature (12 o'clock = soonest hour, clockwise). Colour is absolute — ice white when it's freezing through to red in a heatwave — while length follows the day's own range, so the shape of the day stays readable whatever the season. A faint ring marks freezing on the days the forecast crosses it.</string>
     <string id="TempStyleTitle">Temperature Style</string>
-    <string id="TempStylePrompt">Spark Bars (Rim) draws a ring of spokes at the bezel, one per minute mark, hanging inward with the temperature; the hour ticks become dim rails beneath it. Spark Bars (Inner) is the same comb mid-dial, growing outward inside the cloud bands, leaving the bezel to the rain. Hairline Curve is the oldest and quietest: a single thin line mid-dial.</string>
-    <string id="TempStyleBars">Spark Bars (Rim)</string>
-    <string id="TempStyleBarsInner">Spark Bars (Inner)</string>
+    <string id="TempStylePrompt">Spark Bars draws a comb of spokes mid-dial, one per minute mark, growing outward inside the cloud bands. Hairline Curve is the older and quieter look: a single thin line mid-dial.</string>
+    <string id="TempStyleBarsInner">Spark Bars</string>
     <string id="TempStyleLine">Hairline Curve</string>
     <string id="ShowTempExtremesTitle">Temperature High / Low</string>
     <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour with a small circled value, coloured to match that temperature.</string>

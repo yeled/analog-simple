@@ -17,14 +17,39 @@ const HAND_STYLE_ROUNDED = 3;
 const RING_SOURCE_BODY_BATTERY = 0;
 const RING_SOURCE_WATCH_BATTERY = 1;
 
-// Outer edge of the rain gutter — the rim, i.e. the "horizon". The spark
+// Outer edge of the rain gutter — the rim, i.e. the "horizon". The wind
 // comb hangs from the same radius so the two share one clean outer line.
 const RAIN_OUTER = 0.995;
 
 // Temperature trace styles (see resources/settings/settings.xml)
 const TEMP_STYLE_LINE = 0;
-const TEMP_STYLE_BARS = 1;
+const TEMP_STYLE_BARS = 1;     // legacy: the old rim comb, now the wind's annulus
 const TEMP_STYLE_BARS_INNER = 2;
+
+// The wind comb: one radial spoke per minute mark, hanging inward from the
+// rim. Two independent channels, and unlike the temperature both are
+// absolute:
+//
+//   LENGTH  — sustained speed on a fixed scale. Zero is real and common for
+//             wind, so a calm day *should* read as a bare rim — an adaptive
+//             scale would inflate every breath into a storm.
+//   COLOUR  — the gusts, on their own fixed ramp. A gusty hour glows hotter
+//             than its length suggests, which is exactly the warning gusts
+//             are. Falls back to the sustained speed when the model has no
+//             gust data.
+const WIND_BAR_BASE = 0.995;   // comb baseline — the rim; spokes grow inward
+const WIND_BAR_MIN = 0.03;     // spoke length in a flat calm (presence stub)
+const WIND_BAR_MAX = 0.32;     // spoke length at WIND_SPEED_MAX
+const WIND_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
+const WIND_RAIL_LEN = 0.13;    // dim hour rails that replace the tick marks
+const WIND_SPEED_MAX = 60.0;   // km/h at full spoke length (a near gale)
+const WIND_COLOR_MAX = 80.0;   // km/h gust at the storm end of the ramp
+// The date box spans 0.495-0.745 R around 3 o'clock; a windy afternoon would
+// otherwise drive spokes straight through it, so they stop short across that
+// sector. Bounds are in hours clockwise from 12.
+const WIND_BOX_KEEPOUT = 0.80;
+const WIND_BOX_FROM = 2.5;
+const WIND_BOX_TO = 3.5;
 
 // The temperature reads on two independent channels, which answer two
 // different questions and so can't contradict each other:
@@ -37,29 +62,18 @@ const TEMP_STYLE_BARS_INNER = 2;
 //             number. Out-of-range days just saturate at the ends; because
 //             colour no longer drives length, that costs no shape.
 //
-// Spark bars hang inward from the rim, sharing the annulus with the rain
-// gutter. The inner comb is the older placement — the same spokes growing
-// outward from mid-dial, inside the cloud bands — and the hairline is older
-// still; both are kept as options.
+// The inner comb grows outward from mid-dial, inside the cloud bands; the
+// hairline is older and quieter still. The rim comb the temperature briefly
+// wore now belongs to the wind, where an absolute length scale actually fits.
 const TEMP_RADIUS = 0.355;     // hairline: fraction of _radius it centres on
 const TEMP_AMP = 0.07;         // hairline: peak deviation, same units
-const TEMP_BAR_BASE = 0.995;   // comb baseline — the rim; bars grow inward
-const TEMP_BAR_MIN = 0.05;     // spoke length at the day's coldest hour
-const TEMP_BAR_MAX = 0.32;     // spoke length at the day's warmest hour
 const TEMP_INNER_BASE = 0.285; // inner comb baseline; bars grow outward
 const TEMP_INNER_MIN = 0.018;  // inner comb: spoke length at the coldest hour
 const TEMP_INNER_MAX = 0.14;   // inner comb: spoke length at the warmest hour
 const TEMP_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
-const TEMP_RAIL_LEN = 0.13;    // dim hour rails that replace the tick marks
 const TEMP_BADGE_R = 0.085;    // high/low badge disc radius
 const TEMP_BADGE_GAP = 0.105;  // badge centre, inboard of the spoke tip
 const TEMP_MIN_SPAN = 10.0;    // °C across the full length, minimum
-// The date box spans 0.495-0.745 R around 3 o'clock; a warm afternoon would
-// otherwise drive spokes straight through it, so they stop short across that
-// sector. Bounds are in hours clockwise from 12.
-const TEMP_BOX_KEEPOUT = 0.80;
-const TEMP_BOX_FROM = 2.5;
-const TEMP_BOX_TO = 3.5;
 // Absolute colour scale, in °C.
 const TEMP_COLOR_MIN = -10.0;
 const TEMP_COLOR_MAX = 40.0;
@@ -95,8 +109,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _showRain = true;
     private var _showCloud = true;
     private var _cloudRipple = true;
+    private var _showWind = true;
     private var _showTemp = true;
-    private var _tempStyle = TEMP_STYLE_BARS;
+    private var _tempStyle = TEMP_STYLE_BARS_INNER;
     private var _tempExtremes = false;
     private var _weatherInAOD = false;
     private var _ringSource = RING_SOURCE_BODY_BATTERY;
@@ -172,8 +187,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         _showRain       = getBooleanProperty("ShowRainForecast", true);
         _showCloud      = getBooleanProperty("ShowCloudCover", true);
         _cloudRipple    = getBooleanProperty("CloudCoverRipple", true);
+        _showWind       = getBooleanProperty("ShowWind", true);
         _showTemp       = getBooleanProperty("ShowTemperature", true);
-        _tempStyle      = getNumberProperty("TempStyle", TEMP_STYLE_BARS);
+        _tempStyle      = getNumberProperty("TempStyle", TEMP_STYLE_BARS_INNER);
+        if (_tempStyle == TEMP_STYLE_BARS) {
+            // The rim comb is the wind's now; a stale stored style falls back
+            // to the nearest surviving look rather than fighting it.
+            _tempStyle = TEMP_STYLE_BARS_INNER;
+        }
         _tempExtremes   = getBooleanProperty("ShowTempExtremes", false);
         _weatherInAOD   = getBooleanProperty("ShowWeatherInAOD", false);
         _ringSource     = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
@@ -283,6 +304,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             }
             if (_showCloud) {
                 drawCloudCover(dc);
+            }
+            if (_showWind) {
+                drawWind(dc);
             }
             if (_showTemp) {
                 drawTemperature(dc);
@@ -488,11 +512,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         WatchUi.requestUpdate();
     }
 
-    //! Draw the 12 hour tick marks around the bezel. When the spark comb is
+    //! Draw the 12 hour tick marks around the bezel. When the wind comb is
     //! up it owns that annulus, so the ticks give way to hour rails instead
     //! of fighting it for the same pixels.
     function drawTicks(dc) {
-        if (_showTemp && _tempStyle == TEMP_STYLE_BARS && _isAwake) {
+        if (_showWind && _isAwake) {
             drawHourRails(dc);
             return;
         }
@@ -518,11 +542,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     //! Twelve dim spokes at the hour positions, drawn under the comb. With
     //! the ticks gone these are what keeps the hours findable; they sit at
-    //! the same radius as the comb and stay dark enough that the temperature
-    //! reads on top of them rather than through them.
+    //! the same radius as the comb and stay dark enough that the wind reads
+    //! on top of them rather than through them.
     private function drawHourRails(dc) {
-        var outer = TEMP_BAR_BASE * _radius;
-        var inner = (TEMP_BAR_BASE - TEMP_RAIL_LEN) * _radius;
+        var outer = WIND_BAR_BASE * _radius;
+        var inner = (WIND_BAR_BASE - WIND_RAIL_LEN) * _radius;
 
         dc.setColor(lerpColor(_tickColor, _bgColor, 0.45), Graphics.COLOR_TRANSPARENT);
         for (var i = 0; i < 12; i++) {
@@ -762,12 +786,86 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5 * stormFraction);
     }
 
+    //! Draw the next 12 hours of wind as a circular spark comb: one radial
+    //! spoke per minute mark, hanging inward from the rim. 12 o'clock is the
+    //! soonest hour, clockwise, matching the other bands. The hourly forecast
+    //! is resampled to WIND_BAR_COUNT positions (five spokes an hour) through
+    //! the same Catmull-Rom curve the temperature uses, so the envelope stays
+    //! smooth while the spokes keep the ticked, chart-like read. Length is
+    //! the sustained speed on a fixed scale; colour is the gusts — see the
+    //! constants at the top of the file.
+    private function drawWind(dc) {
+        var speeds = hourlySeries("wind_hourly");
+        if (speeds == null) {
+            return;
+        }
+        var gusts = hourlySeries("gust_hourly");
+        var hasGusts = (gusts != null && gusts.size() == speeds.size());
+
+        var penWidth = (_radius * 0.016).toNumber();
+        if (penWidth < 2) {
+            penWidth = 2;
+        }
+        dc.setPenWidth(penWidth);
+
+        var n = speeds.size();
+        var base = WIND_BAR_BASE * _radius;
+        var keepout = WIND_BOX_KEEPOUT * _radius;
+        for (var b = 0; b < WIND_BAR_COUNT; b++) {
+            // Position in the hourly series, in hours ahead of now. Clamped so
+            // a short series (fewer than 13 samples) repeats its last value
+            // rather than extrapolating off the end of the curve.
+            var pos = b * 12.0 / WIND_BAR_COUNT;
+            if (pos > n - 1) {
+                pos = n - 1;
+            }
+            var i = pos.toNumber();
+            if (i > n - 2) {
+                i = n - 2;
+            }
+
+            var v = catmullAt(speeds, i, pos - i);
+            if (v < 0.0) { v = 0.0; }
+            var frac = v / WIND_SPEED_MAX;
+            if (frac > 1.0) { frac = 1.0; }
+            var r = (WIND_BAR_BASE - WIND_BAR_MIN
+                - (WIND_BAR_MAX - WIND_BAR_MIN) * frac) * _radius;
+            if (pos >= WIND_BOX_FROM && pos <= WIND_BOX_TO && r < keepout) {
+                r = keepout;   // stop short of the date box
+            }
+            var g = hasGusts ? catmullAt(gusts, i, pos - i) : v;
+            if (g < v) { g = v; }   // a gust can't be below the sustained wind
+            var ang = b * Math.PI / (WIND_BAR_COUNT / 2.0);
+            var sin = Math.sin(ang);
+            var cos = Math.cos(ang);
+
+            dc.setColor(dimColor(windRamp(g / WIND_COLOR_MAX)), Graphics.COLOR_TRANSPARENT);
+            dc.drawLine(_centerX + base * sin, _centerY - base * cos,
+                        _centerX + r * sin, _centerY - r * cos);
+        }
+    }
+
+    //! Absolute wind ramp: still grey through a leafy green and teal to a
+    //! storm violet. Deliberately avoids the rain gutter's blue and the
+    //! temperature ramp's sand-to-red, so the three reads never impersonate
+    //! each other on a face they share.
+    function windRamp(t) {
+        if (t < 0.0) { t = 0.0; } else if (t > 1.0) { t = 1.0; }
+        if (t < 0.30) {
+            return lerpColor(0x9AA5AC, 0x74C46E, t / 0.30);
+        }
+        if (t < 0.62) {
+            return lerpColor(0x74C46E, 0x2EC4B6, (t - 0.30) / 0.32);
+        }
+        return lerpColor(0x2EC4B6, 0xB44BF0, (t - 0.62) / 0.38);
+    }
+
     //! Draw the next 12 hours of air temperature in whichever style is
     //! configured. 12 o'clock is the soonest hour, clockwise, matching the
     //! rain and cloud bands. See the constants at the top of the file for how
     //! length and colour split the work between them.
     function drawTemperature(dc) {
-        var vals = temperatureSeries();
+        var vals = hourlySeries("temp_hourly");
         if (vals == null) {
             return;
         }
@@ -809,11 +907,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     }
 
     //! Temperature as a circular spark chart: one radial spoke per minute mark
-    //! around the dial, hanging inward from the rim. The 12 hours of hourly
-    //! forecast are resampled to TEMP_BAR_COUNT positions (five spokes an
-    //! hour) through the same Catmull-Rom curve the hairline uses, so the
-    //! envelope stays smooth while the individual spokes give it the ticked,
-    //! chart-like read of a sparkline.
+    //! around the dial, growing outward from mid-dial inside the cloud bands.
+    //! The 12 hours of hourly forecast are resampled to TEMP_BAR_COUNT
+    //! positions (five spokes an hour) through the same Catmull-Rom curve the
+    //! hairline uses, so the envelope stays smooth while the individual
+    //! spokes give it the ticked, chart-like read of a sparkline.
     private function drawTempBars(dc, vals, mid, span) {
         var n = vals.size();
         var penWidth = (_radius * 0.016).toNumber();
@@ -822,9 +920,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
         dc.setPenWidth(penWidth);
 
-        var isRim = (_tempStyle == TEMP_STYLE_BARS);
-        var base = (isRim ? TEMP_BAR_BASE : TEMP_INNER_BASE) * _radius;
-        var keepout = TEMP_BOX_KEEPOUT * _radius;
+        var base = TEMP_INNER_BASE * _radius;
         for (var b = 0; b < TEMP_BAR_COUNT; b++) {
             // Position in the hourly series, in hours ahead of now. Clamped so
             // a short series (fewer than 13 samples) repeats its last value
@@ -840,9 +936,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
             var v = catmullAt(vals, i, pos - i);
             var r = tempRadiusAt(tempFraction(v, mid, span));
-            if (isRim && pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
-                r = keepout;   // stop short of the date box
-            }
             var ang = b * Math.PI / (TEMP_BAR_COUNT / 2.0);
             var sin = Math.sin(ang);
             var cos = Math.cos(ang);
@@ -921,10 +1014,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! Radius the trace reaches for a length fraction `t` — the hairline's
     //! centre line, or the free tip of a spark bar.
     private function tempRadiusAt(t) {
-        if (_tempStyle == TEMP_STYLE_BARS) {
-            return (TEMP_BAR_BASE - TEMP_BAR_MIN
-                - (TEMP_BAR_MAX - TEMP_BAR_MIN) * t) * _radius;
-        }
         if (_tempStyle == TEMP_STYLE_BARS_INNER) {
             return (TEMP_INNER_BASE + TEMP_INNER_MIN
                 + (TEMP_INNER_MAX - TEMP_INNER_MIN) * t) * _radius;
@@ -952,19 +1041,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var source = [hiIndex, loIndex];
         var marks = new [source.size()];
-        var keepout = TEMP_BOX_KEEPOUT * _radius;
         for (var m = 0; m < source.size(); m++) {
             var i = source[m];
             var v = vals[i];
-            var pos = i * 1.0;
             var r = tempRadiusAt(tempFraction(v, mid, span));
-            if (_tempStyle == TEMP_STYLE_BARS
-                    && pos >= TEMP_BOX_FROM && pos <= TEMP_BOX_TO && r < keepout) {
-                r = keepout;   // follow the spoke that was clipped short
-            }
-            // Inboard of the trace in every style — the rim comb hangs inward
-            // from the bezel, the inner comb and the hairline both sit
-            // mid-dial with the middle free.
+            // Inboard of the trace in both styles — the inner comb and the
+            // hairline both sit mid-dial with the middle free.
             var br = r - TEMP_BADGE_GAP * _radius;
             var ang = i * Math.PI / 6.0;
             marks[m] = [
@@ -1032,11 +1114,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
     }
 
-    //! The cached hourly temperatures as a clean Float array, or null if
-    //! there is nothing usable. Gaps are filled from the nearest known hour
-    //! so a single missing sample doesn't punch a hole in the curve.
-    function temperatureSeries() {
-        var raw = Application.Storage.getValue("temp_hourly");
+    //! A cached hourly series (temperature, wind, gusts) as a clean Float
+    //! array, or null if there is nothing usable. Gaps are filled from the
+    //! nearest known hour so a single missing sample doesn't punch a hole in
+    //! the curve.
+    function hourlySeries(key) {
+        var raw = Application.Storage.getValue(key);
         if (raw == null || raw.size() < 2) {
             return null;
         }
@@ -1117,8 +1200,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! that frees colour to say hot or cold instead of repeating it.
     //!
     //! The cool end is desaturated on purpose. A saturated blue would read as
-    //! the rain gutter, which shares this annulus once the comb hangs from
-    //! the rim.
+    //! the rain gutter's colour wearing the wrong data.
     function tempRamp(t) {
         if (t < 0.0) { t = 0.0; } else if (t > 1.0) { t = 1.0; }
         if (t < 0.22) {
