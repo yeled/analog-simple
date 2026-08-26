@@ -19,7 +19,7 @@
     <string id="CloudCoverRippleTitle">Cloud Color Ripple</string>
     <string id="CloudCoverRipplePrompt">Vary each cloud line's colour in waves along the ring instead of a flat tint. Turn off if it causes Always-On Display to shut off due to the extra drawing work.</string>
     <string id="ShowWindTitle">Wind</string>
-    <string id="ShowWindPrompt">Show the next 12 hours of wind as a comb of spokes hanging in from the bezel, one per minute mark (12 o'clock = soonest hour, clockwise). Length follows the sustained speed on a fixed scale — a calm day stays a bare rim — while colour follows the gusts, from still grey through green and teal to a storm violet. The hour ticks become dim rails beneath it.</string>
+    <string id="ShowWindPrompt">Show the next 12 hours of wind as a single thin line just inside the bezel, over the rain band (12 o'clock = soonest hour, clockwise). The line hugs the rim in a calm and dips inward as the sustained wind rises, on a fixed scale, while its colour follows the gusts — from still grey through green and teal to a storm violet.</string>
     <string id="ShowTemperatureTitle">Temperature</string>
     <string id="ShowTemperaturePrompt">Show the next 12 hours of temperature (12 o'clock = soonest hour, clockwise). Colour is absolute — ice white when it's freezing through to red in a heatwave — while length follows the day's own range, so the shape of the day stays readable whatever the season. A faint ring marks freezing on the days the forecast crosses it.</string>
     <string id="TempStyleTitle">Temperature Style</string>

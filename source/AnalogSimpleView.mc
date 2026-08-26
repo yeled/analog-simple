@@ -26,27 +26,25 @@ const TEMP_STYLE_LINE = 0;
 const TEMP_STYLE_BARS = 1;     // legacy: the old rim comb, now the wind's annulus
 const TEMP_STYLE_BARS_INNER = 2;
 
-// The wind comb: one radial spoke per minute mark, hanging inward from the
-// rim. Two independent channels, and unlike the temperature both are
-// absolute:
+// The wind hairline: a single unfilled line just inside the rim, drawn over
+// the rain gutter. Two independent channels, and unlike the temperature both
+// are absolute:
 //
-//   LENGTH  — sustained speed on a fixed scale. Zero is real and common for
-//             wind, so a calm day *should* read as a bare rim — an adaptive
-//             scale would inflate every breath into a storm.
+//   DEPTH   — sustained speed on a fixed scale. The line hugs the rim in a
+//             calm and dips inward as the wind rises; zero is real and
+//             common for wind, so a calm day *should* read as a quiet rim —
+//             an adaptive scale would inflate every breath into a storm.
 //   COLOUR  — the gusts, on their own fixed ramp. A gusty hour glows hotter
-//             than its length suggests, which is exactly the warning gusts
+//             than its depth suggests, which is exactly the warning gusts
 //             are. Falls back to the sustained speed when the model has no
 //             gust data.
-const WIND_BAR_BASE = 0.995;   // comb baseline — the rim; spokes grow inward
-const WIND_BAR_MIN = 0.03;     // spoke length in a flat calm (presence stub)
-const WIND_BAR_MAX = 0.32;     // spoke length at WIND_SPEED_MAX
-const WIND_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
-const WIND_RAIL_LEN = 0.13;    // dim hour rails that replace the tick marks
-const WIND_SPEED_MAX = 60.0;   // km/h at full spoke length (a near gale)
+const WIND_LINE_BASE = 0.975;  // line radius in a flat calm — just inside the rim
+const WIND_LINE_AMP = 0.29;    // inward travel at WIND_SPEED_MAX
+const WIND_SPEED_MAX = 60.0;   // km/h at full depth (a near gale)
 const WIND_COLOR_MAX = 80.0;   // km/h gust at the storm end of the ramp
 // The date box spans 0.495-0.745 R around 3 o'clock; a windy afternoon would
-// otherwise drive spokes straight through it, so they stop short across that
-// sector. Bounds are in hours clockwise from 12.
+// otherwise drive the line straight through it, so it rides over the box's
+// keepout across that sector. Bounds are in hours clockwise from 12.
 const WIND_BOX_KEEPOUT = 0.80;
 const WIND_BOX_FROM = 2.5;
 const WIND_BOX_TO = 3.5;
@@ -512,15 +510,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         WatchUi.requestUpdate();
     }
 
-    //! Draw the 12 hour tick marks around the bezel. When the wind comb is
-    //! up it owns that annulus, so the ticks give way to hour rails instead
-    //! of fighting it for the same pixels.
+    //! Draw the 12 hour tick marks around the bezel. The wind hairline is
+    //! thin enough to share the annulus with them, so they stay put.
     function drawTicks(dc) {
-        if (_showWind && _isAwake) {
-            drawHourRails(dc);
-            return;
-        }
-
         dc.setColor(_tickColor, Graphics.COLOR_TRANSPARENT);
 
         for (var i = 0; i < 12; i++) {
@@ -537,24 +529,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
             dc.setPenWidth(isMajor ? 4 : 2);
             dc.drawLine(x1, y1, x2, y2);
-        }
-    }
-
-    //! Twelve dim spokes at the hour positions, drawn under the comb. With
-    //! the ticks gone these are what keeps the hours findable; they sit at
-    //! the same radius as the comb and stay dark enough that the wind reads
-    //! on top of them rather than through them.
-    private function drawHourRails(dc) {
-        var outer = WIND_BAR_BASE * _radius;
-        var inner = (WIND_BAR_BASE - WIND_RAIL_LEN) * _radius;
-
-        dc.setColor(lerpColor(_tickColor, _bgColor, 0.45), Graphics.COLOR_TRANSPARENT);
-        for (var i = 0; i < 12; i++) {
-            var sin = _tickSin[i];
-            var cos = _tickCos[i];
-            dc.setPenWidth((i % 3 == 0) ? 7 : 5);
-            dc.drawLine(_centerX + outer * sin, _centerY - outer * cos,
-                        _centerX + inner * sin, _centerY - inner * cos);
         }
     }
 
@@ -786,14 +760,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xCCCCCC, 0x8FA3BF, (coverFraction - 0.5) / 0.5 * stormFraction);
     }
 
-    //! Draw the next 12 hours of wind as a circular spark comb: one radial
-    //! spoke per minute mark, hanging inward from the rim. 12 o'clock is the
-    //! soonest hour, clockwise, matching the other bands. The hourly forecast
-    //! is resampled to WIND_BAR_COUNT positions (five spokes an hour) through
-    //! the same Catmull-Rom curve the temperature uses, so the envelope stays
-    //! smooth while the spokes keep the ticked, chart-like read. Length is
-    //! the sustained speed on a fixed scale; colour is the gusts — see the
-    //! constants at the top of the file.
+    //! Draw the next 12 hours of wind as a single unfilled hairline just
+    //! inside the rim, on top of the rain gutter. 12 o'clock is the soonest
+    //! hour, clockwise, matching the other bands. The line hugs the rim in a
+    //! calm and dips inward as the sustained wind rises (fixed scale), while
+    //! its colour runs along the gust ramp — see the constants at the top of
+    //! the file. Catmull-Rom through the hourly points, like the temperature
+    //! hairline, so it reads as a smooth trace rather than a 12-sided
+    //! polygon.
     private function drawWind(dc) {
         var speeds = hourlySeries("wind_hourly");
         if (speeds == null) {
@@ -802,46 +776,46 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         var gusts = hourlySeries("gust_hourly");
         var hasGusts = (gusts != null && gusts.size() == speeds.size());
 
-        var penWidth = (_radius * 0.016).toNumber();
+        var penWidth = (_radius * 0.014).toNumber();
         if (penWidth < 2) {
             penWidth = 2;
         }
         dc.setPenWidth(penWidth);
 
         var n = speeds.size();
-        var base = WIND_BAR_BASE * _radius;
         var keepout = WIND_BOX_KEEPOUT * _radius;
-        for (var b = 0; b < WIND_BAR_COUNT; b++) {
-            // Position in the hourly series, in hours ahead of now. Clamped so
-            // a short series (fewer than 13 samples) repeats its last value
-            // rather than extrapolating off the end of the curve.
-            var pos = b * 12.0 / WIND_BAR_COUNT;
-            if (pos > n - 1) {
-                pos = n - 1;
-            }
-            var i = pos.toNumber();
-            if (i > n - 2) {
-                i = n - 2;
-            }
+        var sub = 6;
+        var prevX = null;
+        var prevY = null;
+        for (var i = 0; i < n - 1; i++) {
+            for (var s = 0; s <= sub; s++) {
+                if (s == sub && i < n - 2) {
+                    continue;   // next segment's s==0 covers this point
+                }
+                var t = s * 1.0 / sub;
+                var pos = i + t;
+                var v = catmullAt(speeds, i, t);
+                if (v < 0.0) { v = 0.0; }
+                var frac = v / WIND_SPEED_MAX;
+                if (frac > 1.0) { frac = 1.0; }
+                var r = (WIND_LINE_BASE - WIND_LINE_AMP * frac) * _radius;
+                if (pos >= WIND_BOX_FROM && pos <= WIND_BOX_TO && r < keepout) {
+                    r = keepout;   // ride over the date box, not through it
+                }
+                var g = hasGusts ? catmullAt(gusts, i, t) : v;
+                if (g < v) { g = v; }   // a gust can't be below the sustained wind
+                var ang = pos * Math.PI / 6.0;
+                var x = _centerX + r * Math.sin(ang);
+                var y = _centerY - r * Math.cos(ang);
 
-            var v = catmullAt(speeds, i, pos - i);
-            if (v < 0.0) { v = 0.0; }
-            var frac = v / WIND_SPEED_MAX;
-            if (frac > 1.0) { frac = 1.0; }
-            var r = (WIND_BAR_BASE - WIND_BAR_MIN
-                - (WIND_BAR_MAX - WIND_BAR_MIN) * frac) * _radius;
-            if (pos >= WIND_BOX_FROM && pos <= WIND_BOX_TO && r < keepout) {
-                r = keepout;   // stop short of the date box
+                if (prevX != null) {
+                    dc.setColor(dimColor(windRamp(g / WIND_COLOR_MAX)),
+                                Graphics.COLOR_TRANSPARENT);
+                    dc.drawLine(prevX, prevY, x, y);
+                }
+                prevX = x;
+                prevY = y;
             }
-            var g = hasGusts ? catmullAt(gusts, i, pos - i) : v;
-            if (g < v) { g = v; }   // a gust can't be below the sustained wind
-            var ang = b * Math.PI / (WIND_BAR_COUNT / 2.0);
-            var sin = Math.sin(ang);
-            var cos = Math.cos(ang);
-
-            dc.setColor(dimColor(windRamp(g / WIND_COLOR_MAX)), Graphics.COLOR_TRANSPARENT);
-            dc.drawLine(_centerX + base * sin, _centerY - base * cos,
-                        _centerX + r * sin, _centerY - r * cos);
         }
     }
 
