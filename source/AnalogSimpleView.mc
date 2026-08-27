@@ -27,21 +27,28 @@ const TEMP_STYLE_BARS = 1;     // legacy: the old rim comb, now the wind's annul
 const TEMP_STYLE_BARS_INNER = 2;
 
 // The wind hairline: a single unfilled line just inside the rim, drawn over
-// the rain gutter. Two independent channels, and unlike the temperature both
-// are absolute:
+// the rain gutter in one fixed teal — a hue nothing else on the face wears,
+// so the line stays obvious wherever it crosses the blue. Two independent
+// channels, and unlike the temperature both are absolute:
 //
 //   DEPTH   — sustained speed on a fixed scale. The line hugs the rim in a
 //             calm and dips inward as the wind rises; zero is real and
 //             common for wind, so a calm day *should* read as a quiet rim —
 //             an adaptive scale would inflate every breath into a storm.
-//   COLOUR  — the gusts, on their own fixed ramp. A gusty hour glows hotter
-//             than its depth suggests, which is exactly the warning gusts
-//             are. Falls back to the sustained speed when the model has no
-//             gust data.
+//   WIGGLE  — the gusts. Dead smooth in still air; as the gusts build the
+//             line flutters, its wavelength tightening with the gust speed,
+//             so a squally hour looks wind-shaken even when the sustained
+//             depth is modest. Falls back to the sustained speed when the
+//             model has no gust data.
+const WIND_INK = 0x2EC4B6;     // the line's one colour, a teal
 const WIND_LINE_BASE = 0.975;  // line radius in a flat calm — just inside the rim
 const WIND_LINE_AMP = 0.29;    // inward travel at WIND_SPEED_MAX
 const WIND_SPEED_MAX = 60.0;   // km/h at full depth (a near gale)
-const WIND_COLOR_MAX = 80.0;   // km/h gust at the storm end of the ramp
+const WIND_GUST_CALM = 10.0;   // km/h gust below which the line is dead smooth
+const WIND_GUST_MAX = 80.0;    // km/h gust at the tightest flutter
+const WIND_WIGGLE_FREQ = 5.0;  // flutter cycles per hour of dial at WIND_GUST_MAX
+const WIND_WIGGLE_AMP = 0.02;  // flutter amplitude, fraction of _radius
+const WIND_LINE_SUB = 24;      // sub-steps per hour — resolution of the flutter
 // The date box spans 0.495-0.745 R around 3 o'clock; a windy afternoon would
 // otherwise drive the line straight through it, so it rides over the box's
 // keepout across that sector. Bounds are in hours clockwise from 12.
@@ -761,13 +768,15 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     }
 
     //! Draw the next 12 hours of wind as a single unfilled hairline just
-    //! inside the rim, on top of the rain gutter. 12 o'clock is the soonest
-    //! hour, clockwise, matching the other bands. The line hugs the rim in a
-    //! calm and dips inward as the sustained wind rises (fixed scale), while
-    //! its colour runs along the gust ramp — see the constants at the top of
-    //! the file. Catmull-Rom through the hourly points, like the temperature
-    //! hairline, so it reads as a smooth trace rather than a 12-sided
-    //! polygon.
+    //! inside the rim, on top of the rain gutter, in one fixed teal.
+    //! 12 o'clock is the soonest hour, clockwise, matching the other bands.
+    //! The line hugs the rim in a calm and dips inward as the sustained wind
+    //! rises (fixed scale), and it flutters with the gusts — the wiggle's
+    //! wavelength tightens as they build; see the constants at the top of the
+    //! file. Catmull-Rom through the hourly points, like the temperature
+    //! hairline, so the underlying trace stays smooth; the flutter's phase is
+    //! integrated along the arc so its frequency changes without jumps at
+    //! hour boundaries.
     private function drawWind(dc) {
         var speeds = hourlySeries("wind_hourly");
         if (speeds == null) {
@@ -781,10 +790,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             penWidth = 2;
         }
         dc.setPenWidth(penWidth);
+        dc.setColor(dimColor(WIND_INK), Graphics.COLOR_TRANSPARENT);
 
         var n = speeds.size();
         var keepout = WIND_BOX_KEEPOUT * _radius;
-        var sub = 6;
+        var sub = WIND_LINE_SUB;
+        var phase = 0.0;
         var prevX = null;
         var prevY = null;
         for (var i = 0; i < n - 1; i++) {
@@ -798,40 +809,38 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 if (v < 0.0) { v = 0.0; }
                 var frac = v / WIND_SPEED_MAX;
                 if (frac > 1.0) { frac = 1.0; }
-                var r = (WIND_LINE_BASE - WIND_LINE_AMP * frac) * _radius;
+                var g = hasGusts ? catmullAt(gusts, i, t) : v;
+                if (g < v) { g = v; }   // a gust can't be below the sustained wind
+
+                // Local flutter frequency, in cycles per hour of dial: zero in
+                // still air, tightening linearly with the gust speed. The
+                // phase accumulates point to point, so the wavelength shifts
+                // smoothly along the arc.
+                var cyc = (g - WIND_GUST_CALM) / (WIND_GUST_MAX - WIND_GUST_CALM)
+                    * WIND_WIGGLE_FREQ;
+                if (cyc < 0.0) { cyc = 0.0; } else if (cyc > WIND_WIGGLE_FREQ) { cyc = WIND_WIGGLE_FREQ; }
+                phase += 2.0 * Math.PI * cyc / sub;
+                // Amplitude eases in over the ~40 km/h above calm, so a barely
+                // gusty hour trembles rather than snapping to full flutter.
+                var amp = (g - WIND_GUST_CALM) / 40.0;
+                if (amp < 0.0) { amp = 0.0; } else if (amp > 1.0) { amp = 1.0; }
+
+                var r = (WIND_LINE_BASE - WIND_LINE_AMP * frac
+                    + WIND_WIGGLE_AMP * amp * Math.sin(phase)) * _radius;
                 if (pos >= WIND_BOX_FROM && pos <= WIND_BOX_TO && r < keepout) {
                     r = keepout;   // ride over the date box, not through it
                 }
-                var g = hasGusts ? catmullAt(gusts, i, t) : v;
-                if (g < v) { g = v; }   // a gust can't be below the sustained wind
                 var ang = pos * Math.PI / 6.0;
                 var x = _centerX + r * Math.sin(ang);
                 var y = _centerY - r * Math.cos(ang);
 
                 if (prevX != null) {
-                    dc.setColor(dimColor(windRamp(g / WIND_COLOR_MAX)),
-                                Graphics.COLOR_TRANSPARENT);
                     dc.drawLine(prevX, prevY, x, y);
                 }
                 prevX = x;
                 prevY = y;
             }
         }
-    }
-
-    //! Absolute wind ramp: still grey through a leafy green and teal to a
-    //! storm violet. Deliberately avoids the rain gutter's blue and the
-    //! temperature ramp's sand-to-red, so the three reads never impersonate
-    //! each other on a face they share.
-    function windRamp(t) {
-        if (t < 0.0) { t = 0.0; } else if (t > 1.0) { t = 1.0; }
-        if (t < 0.30) {
-            return lerpColor(0x9AA5AC, 0x74C46E, t / 0.30);
-        }
-        if (t < 0.62) {
-            return lerpColor(0x74C46E, 0x2EC4B6, (t - 0.30) / 0.32);
-        }
-        return lerpColor(0x2EC4B6, 0xB44BF0, (t - 0.62) / 0.38);
     }
 
     //! Draw the next 12 hours of air temperature in whichever style is
