@@ -136,6 +136,22 @@ commit is waiting on the prompt, and retry once they're at the keyboard.
 
 ## SDK gotchas (learned the hard way)
 
+- **On-watch settings are two different systems, and the Venu 4 only uses
+  one of them.** `AppBase.getSettingsView` (Menu2 from the face picker) is
+  "supported" on the Venu 4 per the API docs but never surfaces there:
+  fēnix 8-era wearables drive the picker's swipe-right screen with the
+  *native watch face editor* instead (`resources/configs/watchface.xml` +
+  `Application.WatchFaceConfig`, API 5.1.0 — see the SDK's
+  `ConfigurableWatchFace` sample and the "Watch Face Configurations" core
+  topic). The editor speaks only styles/complications/colours — no
+  arbitrary toggles — and its APIs can't be `has`-guarded (a bare reference
+  fails to compile on pre-5.1.0 devices; device-scope via the jungle).
+  Also: read `WatchFaceConfig.getSettings` no earlier than `onLayout` —
+  during `View.initialize` it throws. All of this was built and works on
+  the **parked branch `on-watch-settings`** (shipped as 1.7.0-beta,
+  2026-08-27) but the styles-carousel UX was judged not worth shipping —
+  don't resurrect it without a better interface idea.
+
 - This SDK's jungle parser rejects `project.typeCheckLevel` (and is picky in
   general) — keep `monkey.jungle` to `project.manifest = manifest.xml`.
 - `Graphics` has no `COLOR_CYAN`. Named colors stop at the basic set
