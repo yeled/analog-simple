@@ -76,9 +76,11 @@ async function cmdLogin() {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(DASHBOARD, { waitUntil: "domcontentloaded" });
+  const minutes = Number(arg("--timeout-mins", "10"));
   console.log("A Chrome window is open. Sign in to the developer dashboard");
-  console.log("(SSO + MFA). Waiting up to 5 minutes for the dashboard...");
-  const deadline = Date.now() + 5 * 60 * 1000;
+  console.log(`(SSO + MFA). Waiting up to ${minutes} minutes for the dashboard...`);
+  console.log("(Fresh profile: no password-manager extension — paste from 1Password.)");
+  const deadline = Date.now() + minutes * 60 * 1000;
   while (Date.now() < deadline) {
     if (await looksSignedIn(page)) {
       await context.storageState({ path: STATE_FILE });
