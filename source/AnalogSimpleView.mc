@@ -79,13 +79,13 @@ const TEMP_INNER_BASE = 0.285; // inner comb baseline; bars grow outward
 const TEMP_INNER_MIN = 0.018;  // inner comb: spoke length at the coldest hour
 const TEMP_INNER_MAX = 0.14;   // inner comb: spoke length at the warmest hour
 const TEMP_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
-const TEMP_BADGE_R = 0.085;    // high/low badge disc radius
+const TEMP_BADGE_R = 0.085;    // high/low badge disc radius, minimum — grows to fit the text
+const TEMP_BADGE_PAD = 0.032;  // clearance between the digits and the ring
 const TEMP_BADGE_GAP = 0.105;  // badge centre, inboard of the spoke tip
 const TEMP_MIN_SPAN = 10.0;    // °C across the full length, minimum
 // Absolute colour scale, in °C.
 const TEMP_COLOR_MIN = -10.0;
 const TEMP_COLOR_MAX = 40.0;
-const TEMP_INK = 0xF1F3F4;     // badge text — never the data colour
 
 class AnalogSimpleView extends WatchUi.WatchFace {
 
@@ -143,8 +143,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _ringPercentTime = -1;
 
     // Extreme-temperature markers, computed with the static layer but drawn
-    // over the hands. Null when there's nothing to draw.
+    // over the hands. Null when there's nothing to draw. The badge radius is
+    // computed alongside, from the widest label.
     private var _tempMarks = null;
+    private var _tempBadgeR = 0;
 
     function initialize() {
         WatchFace.initialize();
@@ -1066,10 +1068,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! the comb where the hands sweep, so anything left in the static buffer
     //! gets blitted over.
     //!
-    //! The ring takes the colour of its own value off the absolute ramp, so
-    //! the badge agrees with the spoke it belongs to. That only works because
-    //! the ramp's cold end is ice-white — on the old warm-only ramp a low of
-    //! 2 °C came out near-black and the badge vanished into the face.
+    //! The ring and the number both take the colour of their own value off
+    //! the absolute ramp, so the badge agrees with the spoke it belongs to.
+    //! That only works because the ramp's cold end is ice-white — on the old
+    //! warm-only ramp a low of 2 °C came out near-black and the badge
+    //! vanished into the face. The digits stay readable in any ramp colour
+    //! because the disc is filled with the background first.
     function computeTempMarks(dc, vals, mid, span) {
         var loIndex = 0;
         var hiIndex = 0;
@@ -1093,6 +1097,20 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 dimColor(tempRamp(tempColorFraction(v))), formatTemp(v)
             ];
         }
+
+        // Size the disc to the text it must hold: device fonts differ enough
+        // that a radius which fits in the simulator overflows on the watch.
+        // Both badges share the larger radius so the pair reads as a set.
+        var br = (TEMP_BADGE_R * _radius).toNumber();
+        for (var m = 0; m < marks.size(); m++) {
+            var need = dc.getTextWidthInPixels(marks[m][3], Graphics.FONT_XTINY) / 2
+                + (TEMP_BADGE_PAD * _radius).toNumber();
+            if (need > br) {
+                br = need;
+            }
+        }
+        _tempBadgeR = br;
+
         separateLabels(dc, marks);
         return marks;
     }
@@ -1108,7 +1126,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         }
         var a = marks[0];
         var b = marks[1];
-        var need = 2.0 * TEMP_BADGE_R * _radius + 3;   // two discs plus a gap
+        var need = 2.0 * _tempBadgeR + 3;   // two discs plus a gap
 
         var dx = b[0] - a[0];
         var dy = b[1] - a[1];
@@ -1135,11 +1153,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
     //! Draw the cached high/low badges over the top of the hands. Each is a
     //! background-filled disc so it stays legible wherever it lands — over a
-    //! cloud band, the rain gutter or a hand — with the ring carrying the
-    //! temperature colour and the number in plain light ink. Text never wears
-    //! the data colour: at the ends of the ramp it would be unreadable.
+    //! cloud band, the rain gutter or a hand — with the ring and the number
+    //! both carrying the temperature colour, so the badge reads as one thing.
+    //! The disc's fill is what keeps any ramp colour readable.
     function drawTempExtremes(dc) {
-        var br = (TEMP_BADGE_R * _radius).toNumber();
+        var br = _tempBadgeR;
         var justify = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
         for (var m = 0; m < _tempMarks.size(); m++) {
             var mark = _tempMarks[m];
@@ -1148,7 +1166,6 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             dc.setPenWidth(3);
             dc.setColor(mark[2], Graphics.COLOR_TRANSPARENT);
             dc.drawCircle(mark[0], mark[1], br);
-            dc.setColor(dimColor(TEMP_INK), Graphics.COLOR_TRANSPARENT);
             dc.drawText(mark[0], mark[1], Graphics.FONT_XTINY, mark[3], justify);
         }
     }
