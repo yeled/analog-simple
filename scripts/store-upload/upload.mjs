@@ -2,21 +2,27 @@
 // Upload a .iq to the Garmin Connect IQ store via the developer dashboard.
 //
 // Garmin has no publishing API (asked-for since 2020, never shipped), so this
-// drives the dashboard with Playwright against the locally installed Chrome.
-// Auth is a saved browser session: run `login` once at the keyboard (SSO +
-// MFA), after which `upload` runs unattended until the session expires —
-// then it fails loudly and you `login` again.
+// drives the dashboard in Chrome. Cloudflare's bot check refuses browsers that
+// Playwright *launches* (the automation fingerprint is visible to Turnstile),
+// so the architecture is inverted: a real, un-instrumented Chrome runs on a
+// dedicated profile with its debug port open, you sign in there like a human
+// — nothing attaches during login, the poll below only reads the tab list
+// over HTTP — and Playwright connects over CDP afterwards, to a session
+// Cloudflare already blessed. The profile persists, so subsequent runs are
+// already signed in.
 //
-//   node upload.mjs login
+//   node upload.mjs login [--timeout-mins 10]
 //   node upload.mjs list
 //   node upload.mjs upload --name "Analog Simple" --iq ../../bin/analog-simple-1.6.3.iq \
-//        --notes "Wind hairline; badge fixes" [--dry-run] [--headed]
+//        --notes "Wind hairline; badge fixes" [--dry-run]
 //
-// State lives outside the repo in ~/.config/analog-simple/ so the session
-// can never be committed. Every failure saves a screenshot + HTML dump into
-// bin/ so selectors can be fixed without another MFA round-trip.
+// State lives outside the repo in ~/.config/analog-simple/ (Chrome profile +
+// a storageState snapshot) so nothing sensitive can be committed. Every
+// failure saves a screenshot + HTML dump into bin/ so selectors can be fixed
+// without another sign-in.
 
 import { chromium } from "playwright-core";
+import { spawn } from "node:child_process";
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -26,6 +32,10 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..", "..");
 const STATE_DIR = join(homedir(), ".config", "analog-simple");
 const STATE_FILE = join(STATE_DIR, "garmin-session.json");
+const PROFILE_DIR = join(STATE_DIR, "chrome-profile");
+const CHROME_BIN = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CDP_PORT = 9222;
+const CDP = `http://127.0.0.1:${CDP_PORT}`;
 const DASHBOARD = "https://apps.garmin.com/developer/dashboard";
 
 function arg(flag, fallback) {
@@ -46,19 +56,51 @@ async function debugDump(page, label) {
   }
 }
 
-async function launch({ headed }) {
-  return chromium.launch({ channel: "chrome", headless: !headed });
-}
-
-async function loggedInContext(browser) {
-  if (!existsSync(STATE_FILE)) {
-    throw new Error(`No saved session (${STATE_FILE}). Run: node upload.mjs login`);
+// The tab list over plain HTTP — reads page URLs without instrumenting any
+// page, so it is invisible to bot detection.
+async function cdpTabs() {
+  try {
+    const r = await fetch(`${CDP}/json/list`);
+    return await r.json();
+  } catch {
+    return null;
   }
-  return browser.newContext({ storageState: STATE_FILE });
 }
 
-// True once the page is a signed-in developer dashboard rather than an SSO
-// or marketing page. Kept loose on purpose: the dashboard markup shifts.
+// Make sure the dedicated-profile Chrome is running with its debug port
+// open, starting it on `url` if it isn't.
+async function ensureChrome(url) {
+  if (await cdpTabs()) {
+    if (url) {
+      await fetch(`${CDP}/json/new?${encodeURIComponent(url)}`, { method: "PUT" }).catch(() => {});
+    }
+    return;
+  }
+  if (!existsSync(CHROME_BIN)) {
+    throw new Error(`Chrome not found at ${CHROME_BIN}`);
+  }
+  mkdirSync(PROFILE_DIR, { recursive: true });
+  const child = spawn(
+    CHROME_BIN,
+    [
+      `--user-data-dir=${PROFILE_DIR}`,
+      `--remote-debugging-port=${CDP_PORT}`,
+      "--no-first-run",
+      "--no-default-browser-check",
+      url ?? DASHBOARD,
+    ],
+    { detached: true, stdio: "ignore" }
+  );
+  child.unref();
+  for (let i = 0; i < 40; i++) {
+    if (await cdpTabs()) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("Chrome started but the debug port never answered.");
+}
+
+// True once the page is a signed-in developer dashboard rather than an SSO,
+// Cloudflare or marketing page. Kept loose on purpose: the markup shifts.
 async function looksSignedIn(page) {
   if (!/apps\.garmin\.com/.test(page.url()) || /sso\./.test(page.url())) {
     return false;
@@ -72,43 +114,63 @@ async function looksSignedIn(page) {
 
 async function cmdLogin() {
   mkdirSync(STATE_DIR, { recursive: true });
-  const browser = await launch({ headed: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.goto(DASHBOARD, { waitUntil: "domcontentloaded" });
+  await ensureChrome(DASHBOARD);
   const minutes = Number(arg("--timeout-mins", "10"));
-  console.log("A Chrome window is open. Sign in to the developer dashboard");
-  console.log(`(SSO + MFA). Waiting up to ${minutes} minutes for the dashboard...`);
-  console.log("(Fresh profile: no password-manager extension — paste from 1Password.)");
+  console.log("A separate Chrome (its own profile, no automation attached) is open.");
+  console.log("Sign in to the developer dashboard there — paste the password from");
+  console.log(`1Password; this profile has no extensions. Waiting up to ${minutes} minutes...`);
+
+  // Watch the tab list; attach nothing while any auth-ish page is up. The
+  // sign-in form is served from apps.garmin.com itself (spelled "sign-in"),
+  // so the URL alone can't prove login — when a candidate appears, attach
+  // briefly to verify, and if it isn't signed in yet, detach and keep
+  // waiting rather than giving up on the user mid-password.
   const deadline = Date.now() + minutes * 60 * 1000;
+  const authish = /sso\.|sign-?in|login|auth|cloudflare|challenge/i;
   while (Date.now() < deadline) {
-    if (await looksSignedIn(page)) {
-      await context.storageState({ path: STATE_FILE });
-      console.log(`Session saved: ${STATE_FILE}`);
-      await browser.close();
-      return;
+    const tabs = (await cdpTabs()) ?? [];
+    const candidate = tabs.some(
+      (t) => t.type === "page" && /apps\.garmin\.com/.test(t.url) && !authish.test(t.url)
+    );
+    if (candidate) {
+      const browser = await chromium.connectOverCDP(CDP);
+      try {
+        const context = browser.contexts()[0];
+        const page = context
+          .pages()
+          .find((p) => /apps\.garmin\.com/.test(p.url()) && !authish.test(p.url()));
+        if (page != null && (await looksSignedIn(page))) {
+          await context.storageState({ path: STATE_FILE });
+          console.log(`Signed in. Session snapshot: ${STATE_FILE}`);
+          console.log("You can close that Chrome window — the profile keeps the session.");
+          return;
+        }
+      } finally {
+        await browser.close(); // detaches; the real Chrome keeps running
+      }
     }
-    await page.waitForTimeout(2000);
+    await new Promise((r) => setTimeout(r, 3000));
   }
-  await debugDump(page, "login-timeout");
-  await browser.close();
-  throw new Error("Timed out waiting for a signed-in dashboard.");
+  throw new Error("Timed out: no signed-in dashboard tab appeared.");
 }
 
-async function openDashboard(browser) {
-  const context = await loggedInContext(browser);
-  const page = await context.newPage();
-  await page.goto(DASHBOARD, { waitUntil: "networkidle" });
+// Shared entry for list/upload: real Chrome on the dedicated profile,
+// attached over CDP, dashboard open and signed in.
+async function openDashboard() {
+  await ensureChrome(DASHBOARD);
+  const browser = await chromium.connectOverCDP(CDP);
+  const context = browser.contexts()[0];
+  const page =
+    context.pages().find((p) => /apps\.garmin\.com/.test(p.url())) ?? (await context.newPage());
+  await page.goto(DASHBOARD, { waitUntil: "networkidle" }).catch(() => {});
   if (!(await looksSignedIn(page))) {
     await debugDump(page, "session-expired");
-    throw new Error("Session looks expired or invalid. Run: node upload.mjs login");
+    throw new Error("Not signed in (session expired?). Run: node upload.mjs login");
   }
-  return { context, page };
+  return { browser, page };
 }
 
 async function appLinks(page) {
-  // App cards/rows link into the per-app dashboard pages. Collect any
-  // anchors under the developer area whose text isn't navigation chrome.
   const links = await page.$$eval("a[href*='/developer/']", (as) =>
     as
       .map((a) => ({ text: (a.textContent || "").trim(), href: a.href }))
@@ -122,16 +184,44 @@ async function appLinks(page) {
   return links.filter((l) => !seen.has(l.href) && seen.add(l.href));
 }
 
-async function cmdList() {
-  const browser = await launch({ headed: has("--headed") });
-  try {
-    const { page } = await openDashboard(browser);
-    const links = await appLinks(page);
-    if (links.length === 0) {
-      await debugDump(page, "list-empty");
-      console.log("No app links recognised — see debug artifacts for the real markup.");
+// The dashboard lists the developer account; the apps themselves live one
+// level deeper at /developer/<uuid>/apps. Descend there if we aren't
+// already, then return the app entries.
+async function gotoApps(page) {
+  if (!/\/developer\/[^/]+\/apps/.test(page.url())) {
+    const devApps = (await appLinks(page)).find((l) => /\/developer\/[^/]+\/apps\/?$/.test(l.href));
+    if (devApps) {
+      await page.goto(devApps.href, { waitUntil: "networkidle" });
     }
-    for (const l of links) {
+  }
+  // The apps page renders each app as a data-tid="app-card" card: the name
+  // lives in the icon's title attribute and the link is the card's anchor.
+  const entries = await page.$$eval("[data-tid='app-card']", (cards) =>
+    cards.map((card) => {
+      const img = card.querySelector("img[title]");
+      const a = card.querySelector("a[href]");
+      const status = (card.textContent.match(/Status:\s*\w+/) || [""])[0];
+      const beta = /BETA/.test(card.textContent) ? " [BETA]" : "";
+      return {
+        text: `${img ? img.title : "?"}${beta}${status ? " — " + status : ""}`,
+        name: img ? img.title : "",
+        href: a ? a.href : null,
+      };
+    }).filter((l) => l.href)
+  );
+  const seen = new Set();
+  return entries.filter((l) => !seen.has(l.href) && seen.add(l.href));
+}
+
+async function cmdList() {
+  const { browser, page } = await openDashboard();
+  try {
+    const apps = await gotoApps(page);
+    if (apps.length === 0) {
+      await debugDump(page, "list-empty");
+      console.log("No app entries recognised — see debug artifacts for the real markup.");
+    }
+    for (const l of apps) {
       console.log(`${l.text}\n    ${l.href}`);
     }
   } finally {
@@ -139,8 +229,6 @@ async function cmdList() {
   }
 }
 
-// Click the first locator that exists and is visible, from a list of
-// candidate selectors. Returns the matched selector or null.
 async function clickFirst(page, candidates) {
   for (const c of candidates) {
     const loc = page.locator(c).first();
@@ -161,53 +249,96 @@ async function cmdUpload() {
   const iqPath = resolve(process.cwd(), iq);
   if (!existsSync(iqPath)) throw new Error(`No such file: ${iqPath}`);
 
-  const browser = await launch({ headed: has("--headed") });
-  const finishAndFail = async (page, label, message) => {
+  const { browser, page } = await openDashboard();
+  const fail = async (label, message) => {
     await debugDump(page, label);
     await browser.close();
     throw new Error(message);
   };
 
   try {
-    const { page } = await openDashboard(browser);
-
-    // 1. Into the app's own page.
-    const links = await appLinks(page);
-    const app = links.find((l) => l.text.toLowerCase().includes(name.toLowerCase()));
+    const apps = await gotoApps(page);
+    const app = apps.find((l) => l.name.toLowerCase().includes(name.toLowerCase()));
     if (!app) {
-      return await finishAndFail(page, "no-app-match",
-        `No app link matching "${name}". Run 'list' to see what the dashboard shows.`);
+      return await fail("no-app-match",
+        `No app entry matching "${name}". Run 'list' to see what the dashboard shows.`);
     }
     console.log(`Opening: ${app.text} — ${app.href}`);
     await page.goto(app.href, { waitUntil: "networkidle" });
 
-    // 2. Find the new-version / update entry point.
+    // "Upload New Version" opens a native file chooser rather than exposing
+    // an input, so arm the filechooser listener before clicking.
+    const chooserPromise = page.waitForEvent("filechooser", { timeout: 15000 }).catch(() => null);
     const versionClick = await clickFirst(page, [
+      "button:has-text('Upload New Version')",
+      "text=/upload new version/i",
       "text=/new version/i",
       "text=/update version/i",
-      "text=/upload new version/i",
-      "text=/update app/i",
-      "a[href*='version']",
     ]);
     if (!versionClick) {
-      return await finishAndFail(page, "no-version-entry",
-        "Couldn't find a new-version control on the app page.");
+      return await fail("no-version-entry", "Couldn't find an upload-new-version control.");
     }
-    await page.waitForLoadState("networkidle");
-
-    // 3. Attach the .iq.
-    const fileInput = page.locator("input[type='file']").first();
-    if (!(await fileInput.count())) {
-      return await finishAndFail(page, "no-file-input", "No file input on the version page.");
+    const chooser = await chooserPromise;
+    if (chooser) {
+      await chooser.setFiles(iqPath);
+    } else {
+      // Fallback: some flows render a modal with a real input instead.
+      const fileInput = page.locator("input[type='file']").first();
+      if (!(await fileInput.count())) {
+        return await fail("no-file-input", "Neither a file chooser nor a file input appeared.");
+      }
+      await fileInput.setInputFiles(iqPath);
     }
-    await fileInput.setInputFiles(iqPath);
     console.log(`Attached: ${iqPath}`);
 
-    // Binary validation runs server-side; give it a generous window.
-    await page.waitForTimeout(5000);
-    await page.waitForLoadState("networkidle", { timeout: 120000 }).catch(() => {});
+    // Step 1 also wants the human-readable version string. Derive it from
+    // the .iq filename (analog-simple-<version>.iq) unless --version given.
+    const version =
+      arg("--version", null) ?? (iqPath.match(/analog-simple-([0-9][^/]*?)\.iq$/) || [])[1];
+    if (!version) {
+      return await fail("no-version-string",
+        "Couldn't derive a version from the filename; pass --version.");
+    }
+    let versionFilled = false;
+    for (const make of [
+      () => page.getByLabel(/app version/i),
+      () => page.locator("input:below(:text('App Version'))").first(),
+      () => page.locator("input[type='text']").last(),
+    ]) {
+      const field = make();
+      if (await field.isVisible().catch(() => false)) {
+        await field.fill(version);
+        versionFilled = true;
+        break;
+      }
+    }
+    if (!versionFilled) {
+      return await fail("no-version-field", "Couldn't find the App Version field.");
+    }
+    console.log(`Version: ${version}`);
 
-    // 4. What's-new notes, if a field exists and notes were given.
+    if (dryRun) {
+      await debugDump(page, "dry-run");
+      console.log("Dry run: stopping before 'Upload and publish'. Review the screenshot.");
+      return;
+    }
+
+    // Step 1 → Step 2: uploads the binary and verifies it server-side.
+    const uploadClick = await clickFirst(page, [
+      "button:has-text('Upload and publish')",
+      "button:has-text('Upload')",
+    ]);
+    if (!uploadClick) {
+      return await fail("no-upload-button", "Couldn't find the Upload and publish button.");
+    }
+    console.log("Uploading; waiting for verification...");
+    await page.waitForLoadState("networkidle", { timeout: 180000 }).catch(() => {});
+    await page.waitForTimeout(3000);
+    await debugDump(page, "step2");
+
+    // Step 2: what's-new, then the final submit. Selector candidates are
+    // guesses until the first real run teaches us the markup — the step2
+    // artifacts above are the safety net.
     if (notes) {
       for (const sel of ["textarea[name*='what' i]", "textarea[id*='what' i]", "textarea"]) {
         const ta = page.locator(sel).first();
@@ -218,22 +349,15 @@ async function cmdUpload() {
         }
       }
     }
-
-    if (dryRun) {
-      await debugDump(page, "dry-run");
-      console.log("Dry run: stopping before submit. Review the screenshot.");
-      return;
-    }
-
-    // 5. Submit.
     const submitClick = await clickFirst(page, [
+      "button:has-text('Publish')",
       "button:has-text('Submit')",
       "button:has-text('Save')",
-      "button:has-text('Publish')",
       "input[type='submit']",
     ]);
     if (!submitClick) {
-      return await finishAndFail(page, "no-submit", "Couldn't find a submit control.");
+      return await fail("no-submit",
+        "Couldn't find the final submit on Step 2 — see the step2 artifacts.");
     }
     await page.waitForLoadState("networkidle", { timeout: 120000 }).catch(() => {});
     await debugDump(page, "after-submit");
