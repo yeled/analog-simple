@@ -114,6 +114,15 @@ commit is waiting on the prompt, and retry once they're at the keyboard.
   background fetch with **Simulation → Background Events**.
 - If `monkeydo` says "Unable to connect to simulator", the sim is wedged:
   `pkill -f "ConnectIQ.app/Contents/MacOS/simulator"` and relaunch.
+- **The simulator does not enforce the device's execution watchdog.** A face
+  that draws fine in the sim can be killed on the watch (the "IQ!" triangle)
+  if one `onUpdate` runs too long — and the static-layer rebuild does all
+  weather layers in a single call, so the stress test is a *stormy* day:
+  heavy rain + 100% cloud on all three bands + a gusty wind line
+  (2026-08-27: exactly that combination crashed 1.5.1 on the watch; the sim
+  never blinked). When adding drawing work, budget for the day every layer
+  is at maximum, keep trig/allocation out of inner loops, and prefer
+  adaptive subdivision over fixed-fine.
 
 ## SDK gotchas (learned the hard way)
 

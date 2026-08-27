@@ -51,7 +51,7 @@ const WIND_GUST_CALM = 10.0;   // km/h gust below which the line is dead smooth
 const WIND_GUST_MAX = 80.0;    // km/h gust at the tightest flutter
 const WIND_WIGGLE_FREQ = 5.0;  // flutter cycles per hour of dial at WIND_GUST_MAX
 const WIND_WIGGLE_AMP = 0.02;  // flutter amplitude, fraction of _radius
-const WIND_LINE_SUB = 24;      // sub-steps per hour — resolution of the flutter
+const WIND_SUB_MAX = 24;       // sub-steps per hour at the tightest flutter
 // The date box spans 0.495-0.745 R around 3 o'clock; a windy afternoon would
 // otherwise drive the line straight through it, so it rides over the box's
 // keepout across that sector. Bounds are in hours clockwise from 12.
@@ -776,10 +776,20 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! The line sits on the rim in a calm and peels inward as the sustained
     //! wind rises (fixed scale), and it flutters with the gusts — the
     //! wiggle's wavelength tightens as they build; see the constants at the
-    //! top of the file. Catmull-Rom through the hourly points, like the temperature
-    //! hairline, so the underlying trace stays smooth; the flutter's phase is
-    //! integrated along the arc so its frequency changes without jumps at
-    //! hour boundaries.
+    //! top of the file.
+    //!
+    //! Written for the device's execution watchdog, not for elegance: on a
+    //! stormy day every layer on the face draws at maximum, and the naive
+    //! version of this line (fixed 24 sub-steps, two Catmull evaluations and
+    //! three trig calls per point) was the straw that crashed the app. So the
+    //! work is spent where the eye needs it — a calm hour is a near-straight
+    //! arc and gets 6 segments, only gusty hours buy flutter resolution — and
+    //! the inner loop holds no trig at all: each hour precomputes its
+    //! Catmull-Rom coefficients (evaluated by Horner per point) plus one
+    //! rotation step each for the dial angle and the flutter phase, which the
+    //! loop advances by complex multiply. Flutter frequency holds per hour
+    //! (amplitude still eases point-to-point) and the phase carries across
+    //! hours, so the wavelength stays continuous along the arc.
     private function drawWind(dc) {
         var speeds = hourlySeries("wind_hourly");
         if (speeds == null) {
@@ -797,54 +807,94 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         var n = speeds.size();
         var keepout = WIND_BOX_KEEPOUT * _radius;
-        var sub = WIND_LINE_SUB;
         var phase = 0.0;
         var prevX = null;
         var prevY = null;
         for (var i = 0; i < n - 1; i++) {
+            // Hour-end gusts drive the flutter; a gust can't be below the
+            // sustained wind.
+            var g0 = hasGusts ? gusts[i] : speeds[i];
+            var g1 = hasGusts ? gusts[i + 1] : speeds[i + 1];
+            if (g0 < speeds[i]) { g0 = speeds[i]; }
+            if (g1 < speeds[i + 1]) { g1 = speeds[i + 1]; }
+
+            // This hour's flutter frequency, in cycles per hour of dial: zero
+            // in still air, tightening linearly with the gust speed.
+            var cyc = ((g0 + g1) / 2.0 - WIND_GUST_CALM)
+                / (WIND_GUST_MAX - WIND_GUST_CALM) * WIND_WIGGLE_FREQ;
+            if (cyc < 0.0) { cyc = 0.0; } else if (cyc > WIND_WIGGLE_FREQ) { cyc = WIND_WIGGLE_FREQ; }
+
+            // Segments for this hour: enough to keep the flutter round, few
+            // enough to keep a calm hour nearly free.
+            var sub = 6 + (cyc * 6.0).toNumber();
+            if (sub > WIND_SUB_MAX) { sub = WIND_SUB_MAX; }
+
+            // Catmull-Rom coefficients for the sustained speed across this
+            // hour; the inner loop evaluates them by Horner's rule.
+            var i0 = (i - 1 < 0) ? 0 : i - 1;
+            var i3 = (i + 2 > n - 1) ? n - 1 : i + 2;
+            var p0 = speeds[i0];
+            var p1 = speeds[i];
+            var p2 = speeds[i + 1];
+            var p3 = speeds[i3];
+            var ca = 2.0 * p1;
+            var cb = p2 - p0;
+            var cc = 2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3;
+            var cd = 3.0 * (p1 - p2) + p3 - p0;
+
+            // One rotation step per hour for the dial angle and one for the
+            // flutter phase; the inner loop advances both by complex multiply
+            // instead of calling sin/cos per point.
+            var dAng = Math.PI / 6.0 / sub;
+            var sinD = Math.sin(dAng);
+            var cosD = Math.cos(dAng);
+            var ang = i * Math.PI / 6.0;
+            var sinA = Math.sin(ang);
+            var cosA = Math.cos(ang);
+            var dPhi = 2.0 * Math.PI * cyc / sub;
+            var sinDP = Math.sin(dPhi);
+            var cosDP = Math.cos(dPhi);
+            var sinP = Math.sin(phase);
+            var cosP = Math.cos(phase);
+            phase += dPhi * sub;   // hand the next hour a continuous phase
+
             for (var s = 0; s <= sub; s++) {
                 if (s == sub && i < n - 2) {
-                    continue;   // next segment's s==0 covers this point
+                    continue;   // next hour's s==0 covers this point
                 }
                 var t = s * 1.0 / sub;
-                var pos = i + t;
-                var v = catmullAt(speeds, i, t);
+                var v = 0.5 * (ca + t * (cb + t * (cc + t * cd)));
                 if (v < 0.0) { v = 0.0; }
                 var frac = v / WIND_SPEED_MAX;
                 if (frac > 1.0) { frac = 1.0; }
-                var g = hasGusts ? catmullAt(gusts, i, t) : v;
-                if (g < v) { g = v; }   // a gust can't be below the sustained wind
-
-                // Local flutter frequency, in cycles per hour of dial: zero in
-                // still air, tightening linearly with the gust speed. The
-                // phase accumulates point to point, so the wavelength shifts
-                // smoothly along the arc.
-                var cyc = (g - WIND_GUST_CALM) / (WIND_GUST_MAX - WIND_GUST_CALM)
-                    * WIND_WIGGLE_FREQ;
-                if (cyc < 0.0) { cyc = 0.0; } else if (cyc > WIND_WIGGLE_FREQ) { cyc = WIND_WIGGLE_FREQ; }
-                phase += 2.0 * Math.PI * cyc / sub;
                 // Amplitude eases in over the ~40 km/h above calm, so a barely
                 // gusty hour trembles rather than snapping to full flutter.
-                var amp = (g - WIND_GUST_CALM) / 40.0;
+                var amp = (g0 + (g1 - g0) * t - WIND_GUST_CALM) / 40.0;
                 if (amp < 0.0) { amp = 0.0; } else if (amp > 1.0) { amp = 1.0; }
 
                 // (sin - 1) keeps the flutter entirely inward of the trace:
                 // crests touch it, troughs hang below, and the rim stays a
                 // hard zero line.
                 var r = (WIND_LINE_BASE - WIND_LINE_AMP * frac
-                    + WIND_WIGGLE_AMP * amp * (Math.sin(phase) - 1.0)) * _radius;
-                if (pos >= WIND_BOX_FROM && pos <= WIND_BOX_TO && r < keepout) {
+                    + WIND_WIGGLE_AMP * amp * (sinP - 1.0)) * _radius;
+                if (i + t >= WIND_BOX_FROM && i + t <= WIND_BOX_TO && r < keepout) {
                     r = keepout;   // ride over the date box, not through it
                 }
-                var ang = pos * Math.PI / 6.0;
-                var x = _centerX + r * Math.sin(ang);
-                var y = _centerY - r * Math.cos(ang);
+                var x = _centerX + r * sinA;
+                var y = _centerY - r * cosA;
 
                 if (prevX != null) {
                     dc.drawLine(prevX, prevY, x, y);
                 }
                 prevX = x;
                 prevY = y;
+
+                var rotA = sinA * cosD + cosA * sinD;
+                cosA = cosA * cosD - sinA * sinD;
+                sinA = rotA;
+                var rotP = sinP * cosDP + cosP * sinDP;
+                cosP = cosP * cosDP - sinP * sinDP;
+                sinP = rotP;
             }
         }
     }
