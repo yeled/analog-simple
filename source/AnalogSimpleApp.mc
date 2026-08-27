@@ -32,6 +32,14 @@ class AnalogSimpleApp extends Application.AppBase {
         return [ _view ];
     }
 
+    // On-watch settings: the watch face picker's Apply/Delete screen offers a
+    // Settings entry for faces that implement this, and serves it by calling
+    // here. See SettingsMenu.mc.
+    (:background_excluded)
+    function getSettingsView() {
+        return [ new WeatherSettingsMenu(), new WeatherSettingsDelegate() ];
+    }
+
     // New app settings have been received so trigger a UI update
     function onSettingsChanged() {
         var locationChanged = invalidateCacheIfLocationChanged();
