@@ -1,0 +1,10 @@
+<strings>
+    <!-- Labels for the native watch face editor's style carousel. Only built
+         for devices with the editor, so these ids live here rather than in
+         the shared strings. -->
+    <string id="WfStyleAppSettings">App Settings</string>
+    <string id="WfStyleEverything">Everything</string>
+    <string id="WfStyleRainWind">Rain &amp; Wind</string>
+    <string id="WfStyleTemperature">Temperature</string>
+    <string id="WfStyleClean">Clean</string>
+</strings>

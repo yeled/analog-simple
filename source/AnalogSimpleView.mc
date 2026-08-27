@@ -24,6 +24,18 @@ const TEMP_UNITS_AUTO = 0;
 const TEMP_UNITS_C = 1;
 const TEMP_UNITS_F = 2;
 
+// Styles offered by the native on-device watch face editor (see
+// resources-wfconfig/configs/watchface.xml). The editor only speaks styles,
+// complications and colours — it has no vocabulary for the seven weather
+// toggles — so the toggles are offered as presets instead. APP_SETTINGS is
+// the default and overrides nothing, leaving the phone-side settings in
+// charge for anyone who never opens the editor.
+const WF_STYLE_APP_SETTINGS = 0;
+const WF_STYLE_EVERYTHING = 1;
+const WF_STYLE_RAIN_WIND = 2;
+const WF_STYLE_TEMPERATURE = 3;
+const WF_STYLE_CLEAN = 4;
+
 // Outer edge of the rain gutter — the rim, i.e. the "horizon". The wind
 // comb hangs from the same radius so the two share one clean outer line.
 const RAIN_OUTER = 0.995;
@@ -145,6 +157,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _ringByLevel = true;
     private var _ringColor = 0x00FFFF;
     private var _colorblind = false;
+    private var _wfStyle = WF_STYLE_APP_SETTINGS;
 
     // Offscreen buffer holding the static layer (background, ticks, weather
     // rings, battery ring). Rebuilt only when its inputs change; each frame
@@ -191,6 +204,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         // Screen size is known now; drop any buffer so it's reallocated.
         _buffer = null;
         _bufferValid = false;
+
+        // First safe moment to ask the system for the editor's saved style.
+        onWatchFaceConfigUpdate();
     }
 
     function onShow() {
@@ -232,8 +248,38 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         _ringColor      = dimColor(getRawColor("RingColor", Graphics.COLOR_BLUE));
         _colorblind     = getBooleanProperty("ColorblindMode", false);
 
+        // Layered on top of the properties, so a style preset wins over the
+        // phone settings for the weather layers it speaks for — and only
+        // those. Everything else (colours, hands, units) stays phone-side.
+        // _wfStyle itself is refreshed in onLayout and on editor edits, not
+        // here: this runs from initialize(), too early to read the config.
+        applyStylePreset();
+
         _ringPercentTime = -1;   // force a battery refresh on the next draw
         _bufferValid = false;    // settings changed → rebuild the buffer
+    }
+
+    //! Overlay the editor's style choice onto the cached weather toggles.
+    //! WF_STYLE_APP_SETTINGS deliberately does nothing.
+    private function applyStylePreset() {
+        if (_wfStyle == WF_STYLE_EVERYTHING) {
+            _showRain = true;  _showCloud = true;  _showWind = true;  _showTemp = true;
+        } else if (_wfStyle == WF_STYLE_RAIN_WIND) {
+            _showRain = true;  _showCloud = true;  _showWind = true;  _showTemp = false;
+        } else if (_wfStyle == WF_STYLE_TEMPERATURE) {
+            _showRain = false; _showCloud = false; _showWind = false; _showTemp = true;
+        } else if (_wfStyle == WF_STYLE_CLEAN) {
+            _showRain = false; _showCloud = false; _showWind = false; _showTemp = false;
+        }
+    }
+
+    //! Re-read the style the native editor has saved, then fold it back over
+    //! the properties. Called once the app is up (onLayout) and again on
+    //! every edit, so the preview under the editor is the face the user is
+    //! actually choosing.
+    function onWatchFaceConfigUpdate() {
+        _wfStyle = $.readWatchFaceStyle();
+        cacheSettings();
     }
 
     function onUpdate(dc) {

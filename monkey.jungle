@@ -1,1 +1,46 @@
 project.manifest = manifest.xml
+
+# The native on-device watch face editor is API level 5.1.0 (fenix 8 and
+# newer). Its APIs can't merely be `has`-guarded: referencing WatchFaceConfig
+# at all fails to *compile* for the older devices in the public device list.
+# So the editor code is device-scoped below, and every other device builds the
+# do-nothing twin in source-nowfconfig/ that offers the same two entry points.
+#
+# The list is every device in the store manifest that Toybox.Application.
+# WatchFaceConfig lists as supported (SDK doc/Toybox/Application/
+# WatchFaceConfig.html — check it when adding devices; one that gains an
+# editor but isn't listed here simply won't offer the style carousel).
+base.sourcePath = source;source-nowfconfig
+
+d2mach2.sourcePath = source;source-wfconfig
+d2mach2.resourcePath = $(d2mach2.resourcePath);resources-wfconfig
+d2mach2pro.sourcePath = source;source-wfconfig
+d2mach2pro.resourcePath = $(d2mach2pro.resourcePath);resources-wfconfig
+enduro3.sourcePath = source;source-wfconfig
+enduro3.resourcePath = $(enduro3.resourcePath);resources-wfconfig
+fenix843mm.sourcePath = source;source-wfconfig
+fenix843mm.resourcePath = $(fenix843mm.resourcePath);resources-wfconfig
+fenix847mm.sourcePath = source;source-wfconfig
+fenix847mm.resourcePath = $(fenix847mm.resourcePath);resources-wfconfig
+fenix8pro47mm.sourcePath = source;source-wfconfig
+fenix8pro47mm.resourcePath = $(fenix8pro47mm.resourcePath);resources-wfconfig
+fenix8solar47mm.sourcePath = source;source-wfconfig
+fenix8solar47mm.resourcePath = $(fenix8solar47mm.resourcePath);resources-wfconfig
+fenix8solar51mm.sourcePath = source;source-wfconfig
+fenix8solar51mm.resourcePath = $(fenix8solar51mm.resourcePath);resources-wfconfig
+fenixe.sourcePath = source;source-wfconfig
+fenixe.resourcePath = $(fenixe.resourcePath);resources-wfconfig
+fr57042mm.sourcePath = source;source-wfconfig
+fr57042mm.resourcePath = $(fr57042mm.resourcePath);resources-wfconfig
+fr57047mm.sourcePath = source;source-wfconfig
+fr57047mm.resourcePath = $(fr57047mm.resourcePath);resources-wfconfig
+fr970.sourcePath = source;source-wfconfig
+fr970.resourcePath = $(fr970.resourcePath);resources-wfconfig
+venu441mm.sourcePath = source;source-wfconfig
+venu441mm.resourcePath = $(venu441mm.resourcePath);resources-wfconfig
+venu445mm.sourcePath = source;source-wfconfig
+venu445mm.resourcePath = $(venu445mm.resourcePath);resources-wfconfig
+venux1.sourcePath = source;source-wfconfig
+venux1.resourcePath = $(venux1.resourcePath);resources-wfconfig
+vivoactive6.sourcePath = source;source-wfconfig
+vivoactive6.resourcePath = $(vivoactive6.resourcePath);resources-wfconfig

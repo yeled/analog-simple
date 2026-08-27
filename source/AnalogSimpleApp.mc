@@ -9,11 +9,18 @@ class AnalogSimpleApp extends Application.AppBase {
     // Kept so settings changes can refresh the view's cached settings.
     private var _view = null;
 
+    // True when the system launched us inside the native watch face editor,
+    // which is the only time it wants a WatchFaceDelegate back.
+    private var _editMode = false;
+
     function initialize() {
         AppBase.initialize();
     }
 
     function onStart(state) {
+        if (state != null && state[:launchedFromWatchFaceSettingsEditor] == true) {
+            _editMode = true;
+        }
         registerRainFetch(false);
     }
 
@@ -29,6 +36,14 @@ class AnalogSimpleApp extends Application.AppBase {
     (:background_excluded)
     function getInitialView() {
         _view = new AnalogSimpleView();
+        if (_editMode) {
+            // Only devices with a native editor can get here, and only they
+            // build a real delegate; the twin returns null everywhere else.
+            var delegate = $.makeWatchFaceDelegate(_view);
+            if (delegate != null) {
+                return [ _view, delegate ];
+            }
+        }
         return [ _view ];
     }
 

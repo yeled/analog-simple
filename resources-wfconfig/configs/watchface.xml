@@ -1,0 +1,22 @@
+<resources>
+    <!-- The native on-device watch face editor (fenix 8 and newer, which
+         includes both Venu 4 sizes). This is what the Watch Face app's
+         swipe-right screen actually drives on these devices — AppBase's
+         getSettingsView never appears there, however supported it is.
+
+         The editor's vocabulary is fixed: styles, complications, data colour
+         and accent colour. Arbitrary booleans aren't on the menu, so the
+         seven weather toggles are offered as styles — presets from the full
+         face down to a clean dial. Style 0 changes nothing and leaves the
+         phone-side settings in charge, so a user who never opens the editor
+         keeps exactly the face they configured. -->
+    <watchface-config>
+        <styles>
+            <style id="0" label="@Strings.WfStyleAppSettings" default="true"/>
+            <style id="1" label="@Strings.WfStyleEverything"/>
+            <style id="2" label="@Strings.WfStyleRainWind"/>
+            <style id="3" label="@Strings.WfStyleTemperature"/>
+            <style id="4" label="@Strings.WfStyleClean"/>
+        </styles>
+    </watchface-config>
+</resources>
