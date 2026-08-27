@@ -4,6 +4,7 @@
     <string id="AppVersion">1.6.4</string>
 
     <!-- Setting titles -->
+    <string id="OnWatchMenuTitle">Weather</string>
     <string id="HandStyleTitle">Hand Style</string>
     <string id="HourHandColorTitle">Hour Hand Color</string>
     <string id="MinuteHandColorTitle">Minute Hand Color</string>
