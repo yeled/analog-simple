@@ -1,0 +1,9 @@
+{
+  "name": "analog-simple-store-upload",
+  "private": true,
+  "type": "module",
+  "description": "Drives the Garmin Connect IQ developer dashboard to upload .iq builds, using a saved browser session.",
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

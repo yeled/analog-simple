@@ -3,3 +3,5 @@ bin/
 *.prg
 *.prg.debug.xml
 .DS_Store
+scripts/store-upload/node_modules/
+scripts/store-upload/package-lock.json
