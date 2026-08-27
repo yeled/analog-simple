@@ -43,7 +43,12 @@ const TEMP_STYLE_BARS_INNER = 2;
 //             crests just kiss it) so a gusty calm can't poke past the rim
 //             and blur the zero anchor. Falls back to the sustained speed
 //             when the model has no gust data.
-const WIND_INK = 0x2EC4B6;     // the line's one colour, a teal
+//
+// White, not a hue: the line spends its most important moments crossing the
+// blue rain band, and a teal tried first was invisible there — worse still
+// in colourblind mode. The flutter is what identifies it as the wind;
+// contrast is the colour's whole job.
+const WIND_INK = 0xFFFFFF;     // the line's one colour
 const WIND_LINE_BASE = 0.995;  // line radius in a flat calm — the rim itself
 const WIND_LINE_AMP = 0.29;    // inward travel at WIND_SPEED_MAX
 const WIND_SPEED_MAX = 60.0;   // km/h at full depth (a near gale)
@@ -1108,10 +1113,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         // Size the disc to the text it must hold: device fonts differ enough
         // that a radius which fits in the simulator overflows on the watch.
         // Both badges share the larger radius so the pair reads as a set.
-        var br = (TEMP_BADGE_R * _radius).toNumber();
+        // The degree sign is excluded — it hangs in the padding — and the
+        // ring pulls in a pixel to sit snug against the digits.
+        var br = (TEMP_BADGE_R * _radius).toNumber() - 1;
         for (var m = 0; m < marks.size(); m++) {
             var need = dc.getTextWidthInPixels(marks[m][3], Graphics.FONT_XTINY) / 2
-                + (TEMP_BADGE_PAD * _radius).toNumber();
+                + (TEMP_BADGE_PAD * _radius).toNumber() - 1;
             if (need > br) {
                 br = need;
             }
@@ -1173,7 +1180,12 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             dc.setPenWidth(3);
             dc.setColor(mark[2], Graphics.COLOR_TRANSPARENT);
             dc.drawCircle(mark[0], mark[1], br);
+            // Digits dead-centre; the degree sign hangs off their right edge
+            // so it never skews the number's centering.
             dc.drawText(mark[0], mark[1], Graphics.FONT_XTINY, mark[3], justify);
+            var halfWidth = dc.getTextWidthInPixels(mark[3], Graphics.FONT_XTINY) / 2;
+            dc.drawText(mark[0] + halfWidth, mark[1], Graphics.FONT_XTINY, "°",
+                Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }
 
@@ -1278,14 +1290,16 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xFF9142, 0xF4472C, (t - 0.72) / 0.28);
     }
 
-    //! Format a °C value for display in the watch's configured units.
+    //! Format a °C value for display in the watch's configured units. Digits
+    //! only — the badge draws the degree sign itself, hanging outside the
+    //! centred digits so it doesn't skew them off-centre.
     function formatTemp(celsius) {
         var value = celsius;
         var settings = System.getDeviceSettings();
         if (settings != null && settings.temperatureUnits == System.UNIT_STATUTE) {
             value = celsius * 9.0 / 5.0 + 32.0;
         }
-        return (value + (value < 0 ? -0.5 : 0.5)).toNumber().format("%d") + "°";
+        return (value + (value < 0 ? -0.5 : 0.5)).toNumber().format("%d");
     }
 
     //! Draw the hour, minute and (optionally) second hands
