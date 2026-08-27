@@ -376,15 +376,28 @@ async function cmdUpload() {
       }
       console.log(filled ? "Filled what's-new notes." : "No what's-new field found; continuing.");
     }
-    const submitClick = await clickFirst(page, [
-      "button:text-is('Submit')",
-      "button:text-is('Publish')",
-      "button:text-is('Save')",
-      "input[type='submit']",
-    ]);
-    if (!submitClick) {
+    // The dashboard disables Submit for a beat while it validates the field
+    // just edited, and sometimes floats a "Not Now / Get Started" popup over
+    // the form — so retry with a native DOM click (Playwright's actionability
+    // checks lose this race) until the button takes or a minute passes.
+    let submitted = false;
+    for (let i = 0; i < 30 && !submitted; i++) {
+      submitted = await page.evaluate(() => {
+        const dismiss = [...document.querySelectorAll("button")]
+          .find((b) => b.textContent.trim() === "Not Now");
+        if (dismiss) dismiss.click();
+        const btn = [...document.querySelectorAll("button, input[type='submit']")]
+          .find((b) => /^(Submit|Publish|Save)$/.test((b.textContent || b.value || "").trim()) && !b.disabled);
+        if (!btn) return false;
+        btn.scrollIntoView();
+        btn.click();
+        return true;
+      });
+      if (!submitted) await page.waitForTimeout(2000);
+    }
+    if (!submitted) {
       return await fail("no-submit",
-        "Couldn't find the final submit on Step 2 — see the step2 artifacts.");
+        "Submit never became clickable on Step 2 — see the step2 artifacts.");
     }
     await page.waitForLoadState("networkidle", { timeout: 120000 }).catch(() => {});
     await debugDump(page, "after-submit");
