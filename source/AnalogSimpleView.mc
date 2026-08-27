@@ -82,6 +82,12 @@ const TEMP_BAR_COUNT = 60;     // spokes around the dial — one per minute mark
 const TEMP_BADGE_R = 0.085;    // high/low badge disc radius, minimum — grows to fit the text
 const TEMP_BADGE_PAD = 0.032;  // clearance between the digits and the ring
 const TEMP_BADGE_GAP = 0.105;  // badge centre, inboard of the spoke tip
+// Badge colours are semantic, not the value's own ramp colour: on a mild day
+// the high and low sit close on the absolute scale and both badges came out
+// the same warm salmon — the pair stopped saying which end was which. The
+// ramp's own endpoints are the vocabulary the face already speaks.
+const TEMP_BADGE_HOT = 0xF4472C;   // the ramp's hot end
+const TEMP_BADGE_COLD = 0xEDF4FB;  // the ramp's cold end — ice white
 const TEMP_MIN_SPAN = 10.0;    // °C across the full length, minimum
 // Absolute colour scale, in °C.
 const TEMP_COLOR_MIN = -10.0;
@@ -1068,12 +1074,13 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! the comb where the hands sweep, so anything left in the static buffer
     //! gets blitted over.
     //!
-    //! The ring and the number both take the colour of their own value off
-    //! the absolute ramp, so the badge agrees with the spoke it belongs to.
-    //! That only works because the ramp's cold end is ice-white — on the old
-    //! warm-only ramp a low of 2 °C came out near-black and the badge
-    //! vanished into the face. The digits stay readable in any ramp colour
-    //! because the disc is filled with the background first.
+    //! The ring and the number share one colour per badge, and it's semantic:
+    //! the warmest hour wears the ramp's hot end, the coldest its ice-white
+    //! cold end. The spokes already tell the absolute story — the badges'
+    //! one job is saying which end is which at a glance, which value-coloured
+    //! badges failed at whenever the day's range was narrow. The digits stay
+    //! readable in either colour because the disc is filled with the
+    //! background first.
     function computeTempMarks(dc, vals, mid, span) {
         var loIndex = 0;
         var hiIndex = 0;
@@ -1094,7 +1101,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             var ang = i * Math.PI / 6.0;
             marks[m] = [
                 _centerX + br * Math.sin(ang), _centerY - br * Math.cos(ang),
-                dimColor(tempRamp(tempColorFraction(v))), formatTemp(v)
+                dimColor(m == 0 ? TEMP_BADGE_HOT : TEMP_BADGE_COLD), formatTemp(v)
             ];
         }
 
@@ -1154,8 +1161,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! Draw the cached high/low badges over the top of the hands. Each is a
     //! background-filled disc so it stays legible wherever it lands — over a
     //! cloud band, the rain gutter or a hand — with the ring and the number
-    //! both carrying the temperature colour, so the badge reads as one thing.
-    //! The disc's fill is what keeps any ramp colour readable.
+    //! both carrying that badge's hot or cold colour, so each badge reads as
+    //! one thing. The disc's fill is what keeps either colour readable.
     function drawTempExtremes(dc) {
         var br = _tempBadgeR;
         var justify = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;

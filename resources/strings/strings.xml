@@ -27,7 +27,7 @@
     <string id="TempStyleBarsInner">Spark Bars</string>
     <string id="TempStyleLine">Hairline Curve</string>
     <string id="ShowTempExtremesTitle">Temperature High / Low</string>
-    <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour with a small circled value, coloured to match that temperature.</string>
+    <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour with a small circled value — hot red for the day's high, ice white for the low.</string>
     <string id="ShowWeatherInAODTitle">Weather in Always-On</string>
     <string id="ShowWeatherInAODPrompt">Keep showing the forecast while the screen is dimmed (always-on). To stay within the always-on power budget it draws a single lightweight cloud outline ring (thicker = cloudier) plus a thin rain outline, instead of the full bands. Leave off if always-on still switches off on your watch.</string>
     <string id="LocationOverrideTitle">Location Override</string>
