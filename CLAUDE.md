@@ -82,6 +82,16 @@ tags as part of completing work. Still treat large branch-topology moves
 (merging beta → `public` for a global release) and store uploads as deliberate
 steps: do them when asked and report clearly.
 
+**Store listings & uploads.** On the Connect IQ store the public app is
+listed as **"Analog weather"** and the beta as **"analog simple beta"** —
+neither matches the repo name, so match carefully when automating.
+`scripts/store-upload/` drives the developer dashboard (no Garmin publishing
+API exists): `node upload.mjs login` seeds a real-Chrome session once at the
+keyboard (Cloudflare rejects Playwright-launched browsers — don't "simplify"
+back to that), then `list` / `upload --dry-run` / `upload`. Session lives in
+`~/.config/analog-simple/`. Actually publishing is a deliberate step: always
+dry-run first, and get an explicit yes before the real submit.
+
 **Commits are signed through 1Password** (`commit.gpgsign=true`,
 `gpg.format=ssh`, signer `op-ssh-sign`). Signing needs a GUI approval, so in a
 non-interactive shell `git commit` either dies with `1Password: failed to fill
