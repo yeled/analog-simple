@@ -31,17 +31,20 @@ const TEMP_STYLE_BARS_INNER = 2;
 // so the line stays obvious wherever it crosses the blue. Two independent
 // channels, and unlike the temperature both are absolute:
 //
-//   DEPTH   — sustained speed on a fixed scale. The line hugs the rim in a
-//             calm and dips inward as the wind rises; zero is real and
+//   DEPTH   — sustained speed on a fixed scale, measured *from the rim*:
+//             zero sits exactly on the bezel, so the gap between rim and
+//             line IS the wind, no reference needed. Zero is real and
 //             common for wind, so a calm day *should* read as a quiet rim —
 //             an adaptive scale would inflate every breath into a storm.
 //   WIGGLE  — the gusts. Dead smooth in still air; as the gusts build the
 //             line flutters, its wavelength tightening with the gust speed,
 //             so a squally hour looks wind-shaken even when the sustained
-//             depth is modest. Falls back to the sustained speed when the
-//             model has no gust data.
+//             depth is modest. The flutter hangs inward off the trace (its
+//             crests just kiss it) so a gusty calm can't poke past the rim
+//             and blur the zero anchor. Falls back to the sustained speed
+//             when the model has no gust data.
 const WIND_INK = 0x2EC4B6;     // the line's one colour, a teal
-const WIND_LINE_BASE = 0.975;  // line radius in a flat calm — just inside the rim
+const WIND_LINE_BASE = 0.995;  // line radius in a flat calm — the rim itself
 const WIND_LINE_AMP = 0.29;    // inward travel at WIND_SPEED_MAX
 const WIND_SPEED_MAX = 60.0;   // km/h at full depth (a near gale)
 const WIND_GUST_CALM = 10.0;   // km/h gust below which the line is dead smooth
@@ -770,10 +773,10 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     //! Draw the next 12 hours of wind as a single unfilled hairline just
     //! inside the rim, on top of the rain gutter, in one fixed teal.
     //! 12 o'clock is the soonest hour, clockwise, matching the other bands.
-    //! The line hugs the rim in a calm and dips inward as the sustained wind
-    //! rises (fixed scale), and it flutters with the gusts — the wiggle's
-    //! wavelength tightens as they build; see the constants at the top of the
-    //! file. Catmull-Rom through the hourly points, like the temperature
+    //! The line sits on the rim in a calm and peels inward as the sustained
+    //! wind rises (fixed scale), and it flutters with the gusts — the
+    //! wiggle's wavelength tightens as they build; see the constants at the
+    //! top of the file. Catmull-Rom through the hourly points, like the temperature
     //! hairline, so the underlying trace stays smooth; the flutter's phase is
     //! integrated along the arc so its frequency changes without jumps at
     //! hour boundaries.
@@ -825,8 +828,11 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 var amp = (g - WIND_GUST_CALM) / 40.0;
                 if (amp < 0.0) { amp = 0.0; } else if (amp > 1.0) { amp = 1.0; }
 
+                // (sin - 1) keeps the flutter entirely inward of the trace:
+                // crests touch it, troughs hang below, and the rim stays a
+                // hard zero line.
                 var r = (WIND_LINE_BASE - WIND_LINE_AMP * frac
-                    + WIND_WIGGLE_AMP * amp * Math.sin(phase)) * _radius;
+                    + WIND_WIGGLE_AMP * amp * (Math.sin(phase) - 1.0)) * _radius;
                 if (pos >= WIND_BOX_FROM && pos <= WIND_BOX_TO && r < keepout) {
                     r = keepout;   // ride over the date box, not through it
                 }
