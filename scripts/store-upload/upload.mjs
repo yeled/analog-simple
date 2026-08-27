@@ -232,9 +232,17 @@ async function cmdList() {
 async function clickFirst(page, candidates) {
   for (const c of candidates) {
     const loc = page.locator(c).first();
-    if (await loc.isVisible().catch(() => false)) {
-      await loc.click();
-      return c;
+    if (
+      (await loc.isVisible().catch(() => false)) &&
+      (await loc.isEnabled().catch(() => false))
+    ) {
+      await loc.scrollIntoViewIfNeeded().catch(() => {});
+      try {
+        await loc.click({ timeout: 10000 });
+        return c;
+      } catch {
+        // fall through to the next candidate
+      }
     }
   }
   return null;
@@ -332,27 +340,46 @@ async function cmdUpload() {
       return await fail("no-upload-button", "Couldn't find the Upload and publish button.");
     }
     console.log("Uploading; waiting for verification...");
-    await page.waitForLoadState("networkidle", { timeout: 180000 }).catch(() => {});
-    await page.waitForTimeout(3000);
+    // The public .iq carries 60+ device builds and verification is slow —
+    // wait for Step 2's verified panel, not for the network to go quiet.
+    try {
+      await page
+        .locator("text=/Status:\\s*Verified/i")
+        .first()
+        .waitFor({ timeout: 300000 });
+    } catch {
+      return await fail("verify-timeout",
+        "Binary verification didn't complete within 5 minutes.");
+    }
+    await page.waitForTimeout(2000);
     await debugDump(page, "step2");
 
-    // Step 2: what's-new, then the final submit. Selector candidates are
-    // guesses until the first real run teaches us the markup — the step2
-    // artifacts above are the safety net.
+    // Step 2: what's-new (never the description field), then the final
+    // submit — exact button text, so 'Submit' can't match the Step 1
+    // 'Upload and publish' button lingering disabled in the DOM.
     if (notes) {
-      for (const sel of ["textarea[name*='what' i]", "textarea[id*='what' i]", "textarea"]) {
+      let filled = false;
+      for (const sel of ["textarea[name*='what' i]", "textarea[id*='what' i]"]) {
         const ta = page.locator(sel).first();
         if (await ta.isVisible().catch(() => false)) {
           await ta.fill(notes);
-          console.log("Filled what's-new notes.");
+          filled = true;
           break;
         }
       }
+      if (!filled) {
+        const tas = page.locator("textarea");
+        if ((await tas.count()) >= 2) {
+          await tas.nth(1).fill(notes);
+          filled = true;
+        }
+      }
+      console.log(filled ? "Filled what's-new notes." : "No what's-new field found; continuing.");
     }
     const submitClick = await clickFirst(page, [
-      "button:has-text('Publish')",
-      "button:has-text('Submit')",
-      "button:has-text('Save')",
+      "button:text-is('Submit')",
+      "button:text-is('Publish')",
+      "button:text-is('Save')",
       "input[type='submit']",
     ]);
     if (!submitClick) {
