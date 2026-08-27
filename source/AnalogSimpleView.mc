@@ -17,6 +17,13 @@ const HAND_STYLE_ROUNDED = 3;
 const RING_SOURCE_BODY_BATTERY = 0;
 const RING_SOURCE_WATCH_BATTERY = 1;
 
+// Temperature unit options (see resources/settings/settings.xml). Auto
+// follows the watch's own units setting; the explicit choices are for
+// people whose watch is metric but whose weather sense isn't, or vice versa.
+const TEMP_UNITS_AUTO = 0;
+const TEMP_UNITS_C = 1;
+const TEMP_UNITS_F = 2;
+
 // Outer edge of the rain gutter — the rim, i.e. the "horizon". The wind
 // comb hangs from the same radius so the two share one clean outer line.
 const RAIN_OUTER = 0.995;
@@ -132,6 +139,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
     private var _showTemp = true;
     private var _tempStyle = TEMP_STYLE_BARS_INNER;
     private var _tempExtremes = false;
+    private var _tempUnits = TEMP_UNITS_AUTO;
     private var _weatherInAOD = false;
     private var _ringSource = RING_SOURCE_BODY_BATTERY;
     private var _ringByLevel = true;
@@ -217,6 +225,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             _tempStyle = TEMP_STYLE_BARS_INNER;
         }
         _tempExtremes   = getBooleanProperty("ShowTempExtremes", false);
+        _tempUnits      = getNumberProperty("TempUnits", TEMP_UNITS_AUTO);
         _weatherInAOD   = getBooleanProperty("ShowWeatherInAOD", false);
         _ringSource     = getNumberProperty("RingDataSource", RING_SOURCE_BODY_BATTERY);
         _ringByLevel    = getBooleanProperty("RingColorByLevel", true);
@@ -1292,15 +1301,17 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xFF9142, 0xF4472C, (t - 0.72) / 0.28);
     }
 
-    //! Format a °C value for display in the watch's configured units. Bare
-    //! digits, no degree sign — the coloured ring already says temperature,
-    //! and the sign only skewed the digits off the disc's centre.
+    //! Format a °C value for display. Units follow the TempUnits setting —
+    //! Auto defers to the watch's configured units. Bare digits, no degree
+    //! sign — the coloured ring already says temperature, and the sign only
+    //! skewed the digits off the disc's centre.
     function formatTemp(celsius) {
-        var value = celsius;
-        var settings = System.getDeviceSettings();
-        if (settings != null && settings.temperatureUnits == System.UNIT_STATUTE) {
-            value = celsius * 9.0 / 5.0 + 32.0;
+        var useF = (_tempUnits == TEMP_UNITS_F);
+        if (_tempUnits == TEMP_UNITS_AUTO) {
+            var settings = System.getDeviceSettings();
+            useF = (settings != null && settings.temperatureUnits == System.UNIT_STATUTE);
         }
+        var value = useF ? celsius * 9.0 / 5.0 + 32.0 : celsius;
         return (value + (value < 0 ? -0.5 : 0.5)).toNumber().format("%d");
     }
 

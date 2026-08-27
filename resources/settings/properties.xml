@@ -20,6 +20,7 @@
     <property id="ShowTemperature" type="boolean">true</property>
     <property id="TempStyle" type="number">2</property>
     <property id="ShowTempExtremes" type="boolean">false</property>
+    <property id="TempUnits" type="number">0</property>
     <property id="ShowWeatherInAOD" type="boolean">false</property>
     <property id="LocationOverride" type="string"></property>
 

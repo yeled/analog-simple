@@ -1,7 +1,7 @@
 <strings>
     <string id="AppName">Analog Simple</string>
     <!-- Bumped on every .iq (store) build; keep in sync with the git tag -->
-    <string id="AppVersion">1.6.3</string>
+    <string id="AppVersion">1.6.4</string>
 
     <!-- Setting titles -->
     <string id="HandStyleTitle">Hand Style</string>
@@ -28,6 +28,11 @@
     <string id="TempStyleLine">Hairline Curve</string>
     <string id="ShowTempExtremesTitle">Temperature High / Low</string>
     <string id="ShowTempExtremesPrompt">Mark the warmest and coldest hour with a small circled value — hot red for the day's high, ice white for the low.</string>
+    <string id="TempUnitsTitle">Temperature Units</string>
+    <string id="TempUnitsPrompt">Units for the temperature high/low values. Watch Setting follows the units configured on the watch itself.</string>
+    <string id="TempUnitsAuto">Watch Setting</string>
+    <string id="TempUnitsC">°C</string>
+    <string id="TempUnitsF">°F</string>
     <string id="ShowWeatherInAODTitle">Weather in Always-On</string>
     <string id="ShowWeatherInAODPrompt">Keep showing the forecast while the screen is dimmed (always-on). To stay within the always-on power budget it draws a single lightweight cloud outline ring (thicker = cloudier) plus a thin rain outline, instead of the full bands. Leave off if always-on still switches off on your watch.</string>
     <string id="LocationOverrideTitle">Location Override</string>
