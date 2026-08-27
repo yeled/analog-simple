@@ -815,14 +815,14 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         if (penWidth < 2) {
             penWidth = 2;
         }
-        dc.setPenWidth(penWidth);
-        dc.setColor(dimColor(WIND_INK), Graphics.COLOR_TRANSPARENT);
 
         var n = speeds.size();
         var keepout = WIND_BOX_KEEPOUT * _radius;
         var phase = 0.0;
-        var prevX = null;
-        var prevY = null;
+        // The polyline is collected first and stroked twice below — a halo
+        // pass and the line itself — so the point maths runs once.
+        var xs = [];
+        var ys = [];
         for (var i = 0; i < n - 1; i++) {
             // Hour-end gusts drive the flutter; a gust can't be below the
             // sustained wind.
@@ -893,14 +893,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 if (i + t >= WIND_BOX_FROM && i + t <= WIND_BOX_TO && r < keepout) {
                     r = keepout;   // ride over the date box, not through it
                 }
-                var x = _centerX + r * sinA;
-                var y = _centerY - r * cosA;
-
-                if (prevX != null) {
-                    dc.drawLine(prevX, prevY, x, y);
-                }
-                prevX = x;
-                prevY = y;
+                xs.add(_centerX + r * sinA);
+                ys.add(_centerY - r * cosA);
 
                 var rotA = sinA * cosD + cosA * sinD;
                 cosA = cosA * cosD - sinA * sinD;
@@ -909,6 +903,20 @@ class AnalogSimpleView extends WatchUi.WatchFace {
                 cosP = cosP * cosDP - sinP * sinDP;
                 sinP = rotP;
             }
+        }
+
+        // A whisper of background under the line first: the white has to
+        // cross the pale cloud bands, and the 1px halo is what keeps it
+        // reading as a line there instead of dissolving into them.
+        dc.setColor(_bgColor, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(penWidth + 2);
+        for (var p = 1; p < xs.size(); p++) {
+            dc.drawLine(xs[p - 1], ys[p - 1], xs[p], ys[p]);
+        }
+        dc.setColor(dimColor(WIND_INK), Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(penWidth);
+        for (var p = 1; p < xs.size(); p++) {
+            dc.drawLine(xs[p - 1], ys[p - 1], xs[p], ys[p]);
         }
     }
 
@@ -1112,9 +1120,8 @@ class AnalogSimpleView extends WatchUi.WatchFace {
 
         // Size the disc to the text it must hold: device fonts differ enough
         // that a radius which fits in the simulator overflows on the watch.
-        // Both badges share the larger radius so the pair reads as a set.
-        // The degree sign is excluded — it hangs in the padding — and the
-        // ring pulls in a pixel to sit snug against the digits.
+        // Both badges share the larger radius so the pair reads as a set,
+        // and the ring pulls in a pixel to sit snug against the digits.
         var br = (TEMP_BADGE_R * _radius).toNumber() - 1;
         for (var m = 0; m < marks.size(); m++) {
             var need = dc.getTextWidthInPixels(marks[m][3], Graphics.FONT_XTINY) / 2
@@ -1180,12 +1187,7 @@ class AnalogSimpleView extends WatchUi.WatchFace {
             dc.setPenWidth(3);
             dc.setColor(mark[2], Graphics.COLOR_TRANSPARENT);
             dc.drawCircle(mark[0], mark[1], br);
-            // Digits dead-centre; the degree sign hangs off their right edge
-            // so it never skews the number's centering.
             dc.drawText(mark[0], mark[1], Graphics.FONT_XTINY, mark[3], justify);
-            var halfWidth = dc.getTextWidthInPixels(mark[3], Graphics.FONT_XTINY) / 2;
-            dc.drawText(mark[0] + halfWidth, mark[1], Graphics.FONT_XTINY, "°",
-                Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }
 
@@ -1290,9 +1292,9 @@ class AnalogSimpleView extends WatchUi.WatchFace {
         return lerpColor(0xFF9142, 0xF4472C, (t - 0.72) / 0.28);
     }
 
-    //! Format a °C value for display in the watch's configured units. Digits
-    //! only — the badge draws the degree sign itself, hanging outside the
-    //! centred digits so it doesn't skew them off-centre.
+    //! Format a °C value for display in the watch's configured units. Bare
+    //! digits, no degree sign — the coloured ring already says temperature,
+    //! and the sign only skewed the digits off the disc's centre.
     function formatTemp(celsius) {
         var value = celsius;
         var settings = System.getDeviceSettings();
